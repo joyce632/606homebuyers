@@ -7,7 +7,7 @@
   function show(n) {
     steps.forEach((s) => (s.hidden = s.dataset.step !== String(n)));
     dots.forEach((d, i) => d.classList.toggle("on", i < n));
-    form.querySelector(".steps-indicator").hidden = n > 2;
+    form.querySelector(".offer-head").hidden = n > 2;
     const first = form.querySelector(`[data-step="${n}"] input, [data-step="${n}"] a`);
     if (first) first.focus({ preventScroll: true });
   }
