@@ -14,7 +14,7 @@ python3 -m venv .venv
 ADMIN_EMAIL=you@example.com .venv/bin/python app.py
 ```
 
-Open http://localhost:5060. On first run the app creates one admin account for `ADMIN_EMAIL` and saves a temporary password to `data/FIRST_LOGIN.txt`. Sign in at `/team`, set your own password, then delete that file.
+Open http://127.0.0.1:5060 (use this address, not "localhost"). On first run the app creates one admin account for `ADMIN_EMAIL` and saves a temporary password to `data/FIRST_LOGIN.txt`. Sign in at `/team`, set your own password, then delete that file.
 
 ## Deploy on Render
 

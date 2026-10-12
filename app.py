@@ -680,4 +680,7 @@ def _headers(resp):
 init_db()
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=int(os.environ.get("PORT", 5060)), debug=False)
+    port = int(os.environ.get("PORT", 5060))
+    # Open http://127.0.0.1:<port> — some browsers resolve "localhost" to IPv6, which this server doesn't listen on.
+    print(f"[606] Open http://127.0.0.1:{port} in your browser", flush=True)
+    app.run(host="127.0.0.1", port=port, debug=False)
