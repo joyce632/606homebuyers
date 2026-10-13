@@ -444,10 +444,10 @@
         h('button', { class: 'btn btn-sm', type: 'button', onclick: () => copyText(location.origin + '/deal/' + d.id, () => toast('Link copied')) }, icon('link'), 'Share')));
 
     const others = activeDeals().filter(x => x.id !== d.id).slice(0, 3);
-    root.append(gallery(d), head, h('div', { class: 'deal-layout' }, main, side),
-      others.length ? h('section', { class: 'more-deals' },
-        h('div', { class: 'section-head' }, h('div', {}, h('div', { class: 'kicker', text: 'Keep browsing' }), h('h2', { text: 'More available deals' }))),
-        h('div', { class: 'grid' }, others.map(dealCard))) : null);
+    root.append(gallery(d), head, h('div', { class: 'deal-layout' }, main, side));
+    if (others.length) root.append(h('section', { class: 'more-deals' },
+      h('div', { class: 'section-head' }, h('div', {}, h('div', { class: 'kicker', text: 'Keep browsing' }), h('h2', { text: 'More available deals' }))),
+      h('div', { class: 'grid' }, others.map(dealCard))));
 
     // Phones: keep the price and an offer button in reach.
     if (d.status === 'active') root.append(h('div', { class: 'sticky-offer' },
