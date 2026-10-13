@@ -143,6 +143,28 @@ SCHEMA = [
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
     )""",
+    # Buyer questions and offers sent from a deal page.
+    """CREATE TABLE IF NOT EXISTS inquiries (
+        id TEXT PRIMARY KEY,
+        deal_id TEXT,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        email TEXT,
+        phone TEXT,
+        offer BIGINT,
+        message TEXT,
+        status TEXT NOT NULL DEFAULT 'new',
+        created_at BIGINT NOT NULL
+    )""",
+    # Buyers list sign-ups with their buy box.
+    """CREATE TABLE IF NOT EXISTS buyers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT,
+        phone TEXT,
+        data TEXT NOT NULL,
+        created_at BIGINT NOT NULL
+    )""",
 ]
 
 
@@ -188,7 +210,10 @@ ROLES = ("admin", "editor")
 TEXT_FIELDS = {
     "address": 200, "city": 80, "zip": 10, "area": 80, "county": 60, "lot": 60, "type": 40,
     "occupancy": 40, "closeBy": 10, "description": 8000, "highlights": 3000,
+    "strategy": 40, "condition": 40, "parking": 60,
 }
+STRATEGIES = ("flip", "rental", "wholesale")
+COMP_STATUSES = ("sold", "active", "pending")
 NUM_FIELDS = ("beds", "baths", "sqft", "year", "units", "price", "arv", "repairs", "rent", "emd")
 # Team-only: never sent to the public site.
 PRIVATE_TEXT = {"access": 300, "internalNotes": 5000, "sellerName": 120, "sellerPhone": 40}
@@ -216,8 +241,41 @@ def clean_deal(body):
         out[k] = int(f) if f.is_integer() else round(f, 2)
     if out["closeBy"] and not re.match(r"^\d{4}-\d{2}-\d{2}$", out["closeBy"]):
         out["closeBy"] = None
+    if out["strategy"] not in STRATEGIES:
+        out["strategy"] = None
+    out["comps"] = clean_comps(body.get("comps"))
     if not out["address"]:
         abort(400, "Add a street address.")
+    return out
+
+
+def _num(v, hi=1e10):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f < 0 or f > hi:
+        return None
+    return int(f) if f.is_integer() else round(f, 2)
+
+
+def clean_comps(comps):
+    """Comparable sales shown on the deal page: at most 12 rows of plain fields."""
+    if not isinstance(comps, list):
+        return []
+    out = []
+    for c in comps[:12]:
+        if not isinstance(c, dict):
+            continue
+        address = str(c.get("address") or "").strip()[:120]
+        price = _num(c.get("price"))
+        if not address or price is None:
+            continue
+        status = c.get("status") if c.get("status") in COMP_STATUSES else "sold"
+        out.append({"address": address, "status": status, "price": price,
+                    "beds": _num(c.get("beds"), 100), "baths": _num(c.get("baths"), 100),
+                    "sqft": _num(c.get("sqft"), 1e6), "distance": _num(c.get("distance"), 100),
+                    "date": str(c.get("date") or "").strip()[:20] or None})
     return out
 
 
@@ -572,9 +630,174 @@ def serve_photo(name):
     return resp
 
 
+# ---------------------------------------------------------------- buyer inquiries & buyers list
+
+_public_posts = {}
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _public_guard():
+    """Spam checks for the two public forms: same-site origin, honeypot field, per-IP rate limit."""
+    origin = request.headers.get("Origin")
+    if origin and origin.rstrip("/") != request.url_root.rstrip("/"):
+        abort(403, "Send the form from the 606 Home Buyers site.")
+    body = request.get_json(silent=True) or {}
+    if body.get("website"):  # hidden field real people never fill in
+        abort(400, "Something went wrong. Try again.")
+    key = request.remote_addr or ""
+    t = time.time()
+    with _login_lock:
+        hits = [x for x in _public_posts.get(key, []) if t - x < 600]
+        if len(hits) >= 8:
+            abort(429, "You've sent several messages. Wait a few minutes and try again.")
+        hits.append(t)
+        _public_posts[key] = hits
+    return body
+
+
+def _contact_fields(body):
+    name = str(body.get("name") or "").strip()[:100]
+    email = str(body.get("email") or "").strip().lower()[:160]
+    phone = str(body.get("phone") or "").strip()[:40]
+    if not name:
+        abort(400, "Enter your name.")
+    if email and not EMAIL_RE.match(email):
+        abort(400, "Check your email address.")
+    if not email and len(re.sub(r"\D", "", phone)) < 10:
+        abort(400, "Add a phone number or email so we can reach you.")
+    return name, email or None, phone or None
+
+
+@app.errorhandler(429)
+def _err429(e):
+    return jsonify(error=e.description), 429
+
+
+@app.post("/api/inquiries")
+def create_inquiry():
+    body = _public_guard()
+    name, email, phone = _contact_fields(body)
+    deal_id = str(body.get("dealId") or "")[:20]
+    if not db().one("SELECT id FROM deals WHERE id=?", (deal_id,)):
+        abort(400, "This deal is no longer listed.")
+    kind = "offer" if body.get("kind") == "offer" else "inquiry"
+    offer = _num(body.get("offer")) if kind == "offer" else None
+    if kind == "offer" and not offer:
+        abort(400, "Enter your offer amount.")
+    message = str(body.get("message") or "").strip()[:3000] or None
+    db().execute("INSERT INTO inquiries (id, deal_id, kind, name, email, phone, offer, message, status, created_at) "
+                 "VALUES (?,?,?,?,?,?,?,?,'new',?)",
+                 (uuid.uuid4().hex[:12], deal_id, kind, name, email, phone, offer, message, now_ms()))
+    db().commit()
+    return jsonify(ok=True)
+
+
+def inquiry_out(r):
+    return {"id": r["id"], "dealId": r["deal_id"], "kind": r["kind"], "name": r["name"], "email": r["email"],
+            "phone": r["phone"], "offer": r["offer"], "message": r["message"], "status": r["status"],
+            "createdAt": r["created_at"]}
+
+
+@app.get("/api/inquiries")
+@require()
+def list_inquiries():
+    rows = db().all("SELECT * FROM inquiries ORDER BY created_at DESC LIMIT 500")
+    return jsonify(inquiries=[inquiry_out(r) for r in rows])
+
+
+@app.patch("/api/inquiries/<iid>")
+@require()
+def update_inquiry(iid):
+    body = request.get_json(silent=True) or {}
+    status = body.get("status")
+    if status not in ("new", "contacted", "closed"):
+        abort(400, "Pick a status.")
+    db().execute("UPDATE inquiries SET status=? WHERE id=?", (status, iid))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete("/api/inquiries/<iid>")
+@require()
+def delete_inquiry(iid):
+    db().execute("DELETE FROM inquiries WHERE id=?", (iid,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+BUYBOX_TYPES = ("Single family", "2-4 units", "5+ units", "Condo / townhome", "Mixed use", "Vacant land")
+
+
+@app.post("/api/buyers")
+def create_buyer():
+    body = _public_guard()
+    name, email, phone = _contact_fields(body)
+    data = {
+        "areas": str(body.get("areas") or "").strip()[:500] or None,
+        "types": [t for t in (body.get("types") or []) if t in BUYBOX_TYPES],
+        "strategies": [s for s in (body.get("strategies") or []) if s in STRATEGIES],
+        "maxPrice": _num(body.get("maxPrice")),
+        "funding": body.get("funding") if body.get("funding") in ("cash", "hard money", "conventional") else None,
+        "notes": str(body.get("notes") or "").strip()[:1000] or None,
+    }
+    if email:
+        old = db().one("SELECT id FROM buyers WHERE email=?", (email,))
+        if old:
+            db().execute("UPDATE buyers SET name=?, phone=?, data=?, created_at=? WHERE id=?",
+                         (name, phone, json.dumps(data), now_ms(), old["id"]))
+            db().commit()
+            return jsonify(ok=True)
+    db().execute("INSERT INTO buyers (id, name, email, phone, data, created_at) VALUES (?,?,?,?,?,?)",
+                 (uuid.uuid4().hex[:12], name, email, phone, json.dumps(data), now_ms()))
+    db().commit()
+    return jsonify(ok=True)
+
+
+def buyer_out(r):
+    out = {"id": r["id"], "name": r["name"], "email": r["email"], "phone": r["phone"], "createdAt": r["created_at"]}
+    out.update(json.loads(r["data"]))
+    return out
+
+
+@app.get("/api/buyers")
+@require()
+def list_buyers():
+    rows = db().all("SELECT * FROM buyers ORDER BY created_at DESC")
+    return jsonify(buyers=[buyer_out(r) for r in rows])
+
+
+@app.delete("/api/buyers/<bid>")
+@require()
+def delete_buyer(bid):
+    db().execute("DELETE FROM buyers WHERE id=?", (bid,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.get("/api/buyers.csv")
+@require()
+def export_buyers():
+    import csv
+    import io
+    from datetime import datetime
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Name", "Email", "Phone", "Areas", "Property types", "Strategies", "Max price", "Funding", "Notes", "Signed up"])
+    for r in db().all("SELECT * FROM buyers ORDER BY created_at DESC"):
+        b = buyer_out(r)
+        row = [b["name"], b["email"] or "", b["phone"] or "", b.get("areas") or "", "; ".join(b.get("types") or []),
+               "; ".join(b.get("strategies") or []), b.get("maxPrice") or "", b.get("funding") or "", b.get("notes") or "",
+               datetime.fromtimestamp(b["createdAt"] / 1000).strftime("%Y-%m-%d")]
+        # Neutralize spreadsheet formulas typed into public form fields.
+        w.writerow(["'" + c if isinstance(c, str) and c[:1] in ("=", "+", "-", "@") else c for c in row])
+    return Response(buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=606-buyers-list.csv"})
+
+
 # ---------------------------------------------------------------- settings
 
-SETTING_KEYS = {"phone": 40, "email": 120, "buyersListUrl": 300}
+SETTING_KEYS = {"phone": 40, "email": 120, "buyersListUrl": 300, "advisorName": 80,
+                "dealsClosed": 10, "yearsInBusiness": 10}
 
 
 def get_settings():
@@ -598,6 +821,8 @@ def write_settings():
             v = str(body[k] or "").strip()[:n]
             if k == "buyersListUrl" and v and not v.startswith(("https://", "http://")):
                 abort(400, "The buyers list link must start with https://")
+            if k in ("dealsClosed", "yearsInBusiness") and v and not v.isdigit():
+                abort(400, "Use a whole number for deals closed and years in business.")
             db().execute("DELETE FROM settings WHERE key=?", (k,))
             db().execute("INSERT INTO settings (key, value) VALUES (?,?)", (k, v))
     db().commit()
@@ -641,6 +866,7 @@ def send_index(deal=None):
 
 @app.get("/")
 @app.get("/team")
+@app.get("/buyers")
 def index():
     return send_index()
 

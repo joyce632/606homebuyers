@@ -2,8 +2,11 @@
 
 The public deal site for 606 Home Buyers, an Illinois real estate wholesaler. Buyers browse off-market deals with photos, price, ARV, repairs, beds and baths. The team signs in at `/team` to post deals, upload photos, change status (Active, Pending, Sold, Closed) and manage users.
 
-- **Public site:** home page with hero and live inventory counts, deal grid with filters and search, and a shareable page for every deal (`/deal/<id>`) that shows a photo preview when the link is texted or emailed.
-- **Team dashboard (`/team`):** deals table with inline status changes, deal editor with photo upload (JPG, PNG, WebP, iPhone HEIC), team-only fields (contract price, seller, access, notes) and assignment fee, "Copy for buyer blast", users, contact settings, and password change.
+- **Public site:** photo hero with a live "deals available now" count, a stats bar, deal cards showing % below ARV and estimated equity, filters by status and strategy (fix & flip, buy & hold, wholesale), a strategies section, how it works, recently sold, and the areas you have deals in.
+- **Deal pages (`/deal/<id>`):** photo mosaic with a full-screen viewer, property details, deal analysis (all-in cost, equity, gross yield), comparable sales with average sold price and $/sq ft, and a **Make an offer / Ask a question** form. Links show a photo preview when texted or emailed.
+- **Buyers list (`/buyers`):** buyers sign up with their buy box (areas, property types, strategies, max price, funding).
+- **Team dashboard (`/team`):** deals table with inline status changes, deal editor with photo upload (JPG, PNG, WebP, iPhone HEIC), strategy, condition and comps, team-only fields (contract price, seller, access, notes) and assignment fee, "Copy for buyer blast", **Offers & questions** inbox, **Buyers list** with CSV download, users, site settings, and password change.
+- **Try it with sample data:** `DATA_DIR=demo-data .venv/bin/python seed_demo.py`, then `DATA_DIR=demo-data PORT=5061 .venv/bin/python app.py`.
 - **Roles:** *Admin* manages deals, users and site settings. *Editor* manages deals.
 
 ## Run it on your computer
