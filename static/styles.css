@@ -411,7 +411,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 
 .foot-grid > div:not(.foot-about) { display: grid; gap: 8px; align-content: start; }
 .foot-grid a:not(.btn):not(.brand), .linklike { color: #C9D6E4; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; overflow-wrap: anywhere; }
 .foot-grid a:not(.btn):not(.brand):hover, .linklike:hover { color: #FFFFFF; }
-.foot-grid svg { width: 14px; height: 14px; flex-shrink: 0; }
+.foot-grid svg:not(.brand-mark) { width: 14px; height: 14px; flex-shrink: 0; }
 #foot-contact { display: grid; gap: 8px; }
 .foot-legal { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; margin-top: 36px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,.12); font-size: 12.5px; color: #9FB3C8; }
 .foot-legal span:last-child { max-width: 70ch; }
@@ -476,8 +476,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 
 .checks li { display: flex; gap: 10px; align-items: flex-start; }
 .checks svg { width: 18px; height: 18px; color: var(--st-active); flex-shrink: 0; margin-top: 2px; }
 .pos { color: var(--st-active); }
-.comp-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; }
-.comp-sum div { background: var(--surface-2); padding: 12px 14px; display: grid; gap: 2px; }
+.comp-sum { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; }
+.comp-sum div { background: var(--surface-2); padding: 12px 14px; display: grid; gap: 2px; flex: 1 1 130px; }
 .comp-sum span { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
 .comp-sum b { font-size: 18px; font-variant-numeric: tabular-nums; }
 .tbl-comps { min-width: 640px; }
