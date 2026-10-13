@@ -115,7 +115,7 @@ a { color: var(--brand-strong); }
 .stat + .stat { border-left: 1px solid var(--line); }
 .stat b { font-size: 30px; font-weight: 800; letter-spacing: -.02em; color: var(--navy); font-variant-numeric: tabular-nums; }
 .stat span { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 600; }
-@media (max-width: 640px) { .stats-in { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stat:nth-child(3) { border-left: 0; } .stat:nth-child(n+3) { border-top: 1px solid var(--line); } .stat b { font-size: 24px; } }
+@media (max-width: 640px) { .stats-in { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stat:nth-child(3) { border-left: 0; } .stat:nth-child(n+3) { border-top: 1px solid var(--line); } .stat b { font-size: 24px; } .stat:last-child:nth-child(odd) { grid-column: 1 / -1; border-left: 0; } }
 
 .kicker { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--brand-strong); margin-bottom: 6px; }
 .band { background: var(--surface); border-block: 1px solid var(--line); padding-block: 8px 64px; margin-top: 8px; }
