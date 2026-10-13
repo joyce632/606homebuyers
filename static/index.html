@@ -18,8 +18,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Fredoka:wght@700&display=swap">
-<link rel="stylesheet" href="/static/styles.css?v=2">
-<script src="/static/app.js?v=2" defer></script>
+<link rel="stylesheet" href="/static/styles.css?v=3">
+<script src="/static/app.js?v=3" defer></script>
 </head>
 <body>
 
@@ -283,12 +283,13 @@
 <dialog id="dlg-edit" aria-labelledby="de-title">
   <div class="dlg-head">
     <h2 id="de-title">Add deal</h2>
+    <button class="btn btn-sm" type="button" id="de-sample">Fill with sample deal</button>
     <button class="icon-btn" type="button" id="de-x" aria-label="Close"><svg><use href="#i-x"/></svg></button>
   </div>
   <form class="dlg-body" id="deal-form" novalidate>
     <div class="form">
       <fieldset class="fs">
-        <legend>Status &amp; strategy</legend>
+        <legend>Status when published &amp; strategy</legend>
         <div class="status-pick" id="f-status"></div>
         <div class="row">
           <div class="field"><label for="f-strategy">Best for</label><select class="select" id="f-strategy">
@@ -378,7 +379,8 @@
     <span class="err" id="de-err" hidden></span>
     <span class="spacer"></span>
     <button class="btn btn-ghost" type="button" id="de-cancel">Cancel</button>
-    <button class="btn btn-primary" type="submit" form="deal-form" id="de-save">Save deal</button>
+    <button class="btn" type="button" id="de-draft">Save draft</button>
+    <button class="btn btn-primary" type="submit" form="deal-form" id="de-save">Publish deal</button>
   </div>
 </dialog>
 

@@ -214,6 +214,9 @@ a { color: var(--brand-strong); }
 .st-pending { color: var(--st-pending); background: var(--st-pending-bg); }
 .st-sold { color: var(--st-sold); background: var(--st-sold-bg); }
 .st-closed { color: var(--st-closed); background: var(--st-closed-bg); }
+.st-draft { color: var(--muted); background: var(--surface-2); outline: 1px dashed var(--line); }
+.dot.st-draft { background: var(--muted); }
+.draft-banner { margin-bottom: 16px; }
 .dot.st-active { background: var(--st-active); } .dot.st-pending { background: var(--st-pending); }
 .dot.st-sold { background: var(--st-sold); } .dot.st-closed { background: var(--st-closed); }
 

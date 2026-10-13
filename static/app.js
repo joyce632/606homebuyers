@@ -9,6 +9,9 @@
     { key: 'closed', label: 'Closed' },
   ];
   const STATUS_LABEL = Object.fromEntries(STATUSES.map(s => [s.key, s.label]));
+  STATUS_LABEL.draft = 'Draft';
+  // Team views include drafts; the public site never sees them.
+  const TEAM_STATUSES = [{ key: 'draft', label: 'Draft' }, ...STATUSES];
   const STRATEGY = { flip: 'Fix & flip', rental: 'Buy & hold', wholesale: 'Wholesale' };
   const TYPES = ['Single family', '2-flat', '3-flat', '4-unit', '5+ units', 'Condo', 'Townhome', 'Mixed use', 'Vacant land'];
   const OCC = ['Vacant', 'Tenant occupied', 'Owner occupied', 'Partially occupied'];
@@ -135,6 +138,7 @@
   }
   const findDeal = id => S.deals.find(d => d.id === id);
   const activeDeals = () => S.deals.filter(d => d.status === 'active');
+  const publicDeals = () => S.deals.filter(d => d.status !== 'draft');
 
   /* ---------- routing ---------- */
   function go(url, opts = {}) {
@@ -256,7 +260,7 @@
 
   function renderHome() {
     const act = activeDeals();
-    const c = counts(S.deals);
+    const c = counts(publicDeals());
 
     // Hero: the newest active deal's cover photo behind the headline.
     const cover = act.find(d => (d.photos || []).length);
@@ -291,7 +295,7 @@
       h('div', { class: 'sold-body' }, h('b', { text: placeName(d) }), h('span', { text: [d.type, d.zip].filter(Boolean).join(' · ') })))));
 
     const areas = {};
-    for (const d of S.deals) { const k = d.area || d.city; if (k) areas[k] = (areas[k] || 0) + 1; }
+    for (const d of publicDeals()) { const k = d.area || d.city; if (k) areas[k] = (areas[k] || 0) + 1; }
     const keys = Object.keys(areas).sort((a, b) => areas[b] - areas[a]);
     $('areas').hidden = !keys.length;
     $('area-chips').replaceChildren(...keys.map(k => h('button', { class: 'chip', type: 'button', onclick: () => {
@@ -300,7 +304,8 @@
   }
 
   function renderGrid() {
-    const c = counts(S.deals);
+    const all = publicDeals();
+    const c = counts(all);
     const seg = $('seg'); seg.replaceChildren();
     for (const o of [{ key: 'all', label: 'All' }, ...STATUSES]) {
       seg.append(h('button', {
@@ -314,14 +319,14 @@
     $('avail-count').textContent = '';
     if (!S.loaded) { for (let i = 0; i < 3; i++) grid.append(h('div', { class: 'card skeleton' }, h('div', { class: 'media' }))); return; }
     if (S.loadError) { empty.append(h('div', { class: 'notice' }, icon('info'), h('span', { text: 'Deals could not be loaded. Refresh the page to try again.' }))); return; }
-    if (!S.deals.length) {
+    if (!all.length) {
       empty.append(h('div', { class: 'empty' }, h('div', { class: 'noimg' }, icon('house')),
         h('h2', { text: 'New deals are on the way' }),
         h('p', { text: 'There are no properties listed right now. Join the buyers list to hear about the next one first.' }),
         h('a', { class: 'btn btn-primary', href: '/buyers', 'data-link': true }, 'Join the buyers list')));
       return;
     }
-    const list = sortDeals(S.deals.filter(d => (S.filter === 'all' || d.status === S.filter) &&
+    const list = sortDeals(all.filter(d => (S.filter === 'all' || d.status === S.filter) &&
       (S.strategy === 'all' || d.strategy === S.strategy) && matches(d, S.q)), S.sort);
     $('avail-count').textContent = `${list.length} ${list.length === 1 ? 'property' : 'properties'}`;
     if (!list.length) {
@@ -396,7 +401,9 @@
         h('a', { class: 'btn btn-primary', href: '/#available', 'data-link': true }, 'See current deals')));
       return;
     }
-    document.title = `${d.address} · ${placeName(d)} | 606 Home Buyers`;
+    document.title = `${d.address || 'Untitled draft'} · ${placeName(d)} | 606 Home Buyers`;
+    if (d.status === 'draft') root.append(h('div', { class: 'notice draft-banner' }, icon('lock'),
+      h('span', { text: 'Draft. Only your team can see this page. Publish it from the editor when it is ready for buyers.' })));
     const pct = below(d), eq = equity(d);
 
     const facts = [];
@@ -430,7 +437,7 @@
       h('div', { class: 'tags' }, pill(d.status),
         d.strategy ? h('span', { class: 'strat-tag', text: STRATEGY[d.strategy] }) : null,
         pct != null && d.status === 'active' ? h('span', { class: 'disc', text: pct + '% below ARV' }) : null),
-      h('h1', { text: d.address }),
+      h('h1', { text: d.address || 'Untitled draft' }),
       h('div', { class: 'loc' }, icon('pin'), h('span', { text: locLine(d) })),
       h('div', { class: 'head-row' },
         facts.length ? h('ul', { class: 'facts-lg' }, facts.map(([ic, v, l]) => h('li', {}, ic, h('div', {}, h('b', { text: v }), h('span', { text: l }))))) : h('span'),
@@ -510,6 +517,10 @@
       h('span', { class: 'avatar', text: name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase() }),
       h('div', {}, h('b', { text: name }), h('span', { text: 'Dispositions' })),
       s.phone ? h('a', { class: 'btn btn-sm', href: telHref(s.phone) }, icon('phone'), s.phone) : null));
+    if (d.status === 'draft') {
+      card.append(h('div', { class: 'notice' }, icon('lock'), h('span', { text: 'Buyers will see the offer form here once this deal is published.' })));
+      return card;
+    }
     if (d.status !== 'active') {
       card.append(h('div', { class: 'notice' }, icon('info'), h('span', { text: `This property is ${STATUS_LABEL[d.status].toLowerCase()}. Join the buyers list to hear about the next one first.` })),
         h('a', { class: 'btn btn-primary btn-lg', href: '/buyers', 'data-link': true }, 'Join the buyers list'));
@@ -565,7 +576,7 @@
     if (d.sellerName) lines.push(['Seller', d.sellerName]);
     if (d.sellerPhone) lines.push(['Seller phone', d.sellerPhone]);
     if (d.access) lines.push(['Access', d.access]);
-    const sel = h('select', { class: 'select', 'aria-label': 'Change status' }, STATUSES.map(s => h('option', { value: s.key, text: s.label })));
+    const sel = h('select', { class: 'select', 'aria-label': 'Change status' }, TEAM_STATUSES.map(s => h('option', { value: s.key, text: s.label })));
     sel.value = d.status;
     sel.addEventListener('change', () => saveStatus(d.id, sel.value));
     return h('div', { class: 'box box-private' },
@@ -609,8 +620,8 @@
   async function saveStatus(id, status) {
     try {
       const r = await api('PATCH', `/api/deals/${id}/status`, { status });
-      upsertDeal(r.deal); toast('Status set to ' + STATUS_LABEL[status]); route({ keepScroll: true });
-    } catch (e) { toast(e.message); }
+      upsertDeal(r.deal); toast(status === 'draft' ? 'Moved to drafts' : 'Status set to ' + STATUS_LABEL[status]); route({ keepScroll: true });
+    } catch (e) { toast(e.message); route({ keepScroll: true }); }
   }
   function upsertDeal(d) {
     const i = S.deals.findIndex(x => x.id === d.id);
@@ -717,11 +728,14 @@
   function openEdit(id) {
     const d = id ? findDeal(id) : null;
     editOrig = d;
-    $('de-title').textContent = d ? 'Edit deal' : 'Add deal';
-    $('de-save').textContent = d ? 'Save changes' : 'Post deal';
+    $('de-title').textContent = !d ? 'Add deal' : d.status === 'draft' ? 'Edit draft' : 'Edit deal';
+    const published = d && d.status !== 'draft';
+    $('de-save').textContent = published ? 'Save changes' : 'Publish deal';
+    $('de-draft').hidden = published;
+    $('de-sample').hidden = !!d;
     for (const [f, k] of Object.entries(TEXTS)) F(f).value = d?.[k] ?? (f === 'city' && !d ? 'Chicago' : f === 'county' && !d ? 'Cook' : '');
     for (const [f, k] of Object.entries(NUMS)) F(f).value = d?.[k] ?? '';
-    $('f-st-' + (d?.status || 'active')).checked = true;
+    $('f-st-' + (d && d.status !== 'draft' ? d.status : 'active')).checked = true;
     F('comps').replaceChildren(...(d?.comps || []).map(compRow));
     photos = [...(d?.photos || [])];
     sessionUploads = new Set();
@@ -782,28 +796,50 @@
   $('de-cancel').addEventListener('click', closeEdit);
   $('dlg-edit').addEventListener('cancel', e => { e.preventDefault(); closeEdit(); });
 
-  $('deal-form').addEventListener('submit', async e => {
-    e.preventDefault();
+  $('deal-form').addEventListener('submit', e => { e.preventDefault(); saveDeal(false); });
+  $('de-draft').addEventListener('click', () => saveDeal(true));
+  async function saveDeal(asDraft) {
     const err = $('de-err');
-    if (!F('address').value.trim()) { err.hidden = false; err.textContent = 'Add a street address.'; F('address').focus(); return; }
+    if (!asDraft && !F('address').value.trim()) { err.hidden = false; err.textContent = 'Add a street address before publishing, or save it as a draft.'; F('address').focus(); return; }
     if (uploading) { err.hidden = false; err.textContent = 'Wait for photos to finish uploading.'; return; }
     err.hidden = true;
     const body = {};
     for (const [f, k] of Object.entries(TEXTS)) body[k] = F(f).value.trim() || null;
     for (const [f, k] of Object.entries(NUMS)) body[k] = F(f).value === '' ? null : Number(F(f).value);
-    body.status = document.querySelector('input[name="status"]:checked')?.value || 'active';
+    body.status = asDraft ? 'draft' : (document.querySelector('input[name="status"]:checked')?.value || 'active');
     body.photos = photos.slice();
     body.comps = readComps();
-    const btn = $('de-save'); btn.disabled = true;
+    const btns = [$('de-save'), $('de-draft')]; btns.forEach(b => { b.disabled = true; });
+    const wasDraft = !editOrig || editOrig.status === 'draft';
     try {
       const r = editOrig ? await api('PUT', '/api/deals/' + editOrig.id, body) : await api('POST', '/api/deals', body);
       upsertDeal(r.deal);
       sessionUploads = new Set();
       $('dlg-edit').close();
-      toast(editOrig ? 'Deal saved' : 'Deal posted');
+      toast(asDraft ? 'Draft saved. Only your team can see it.' : wasDraft ? 'Deal published' : 'Deal saved');
       route({ keepScroll: true });
     } catch (ex) { err.hidden = false; err.textContent = ex.message; }
-    btn.disabled = false;
+    btns.forEach(b => { b.disabled = false; });
+  }
+
+  // A clearly labeled practice listing, for trying the editor and drafts.
+  $('de-sample').addEventListener('click', () => {
+    const sample = {
+      address: '1234 W Sample St', city: 'Chicago', zip: '60608', area: 'Pilsen', county: 'Cook', type: '2-flat',
+      beds: 5, baths: 2, sqft: 2280, lot: '25 x 125', year: 1904, units: 2, occ: 'Vacant', parking: '2-car garage',
+      price: 239000, arv: 465000, repairs: 118000, rent: 3100, emd: 5000, strategy: 'rental', condition: 'Full rehab',
+      desc: 'SAMPLE LISTING FOR TESTING. This is not a real property.\n\nBrick 2-flat with both units vacant and ready for a full rehab. Renovated 2-flats nearby trade around $450-480k.',
+      hl: 'Both units vacant\nSeparate furnaces and meters\nNear the Pink Line',
+      notes: 'Sample deal. Delete when done testing.',
+    };
+    for (const [k, v] of Object.entries(sample)) F(k).value = v;
+    const close = new Date(Date.now() + 30 * 86400000);
+    F('close').value = close.toISOString().slice(0, 10);
+    F('comps').replaceChildren(
+      compRow({ status: 'sold', address: '2300 W Sample Ave', beds: 5, baths: 2, sqft: 2300, price: 472000, distance: 0.3 }),
+      compRow({ status: 'sold', address: '2150 W Example St', beds: 4, baths: 2, sqft: 2100, price: 455000, distance: 0.5 }),
+      compRow({ status: 'active', address: '1900 S Demo Ave', beds: 6, baths: 3, sqft: 2500, price: 489000, distance: 0.7 }));
+    toast('Sample deal filled in. Save it as a draft to test.');
   });
 
   /* ---------- team area ---------- */
@@ -902,7 +938,8 @@
   function dashDeals() {
     const wrap = h('div', {});
     const c = counts(S.deals);
-    const seg = h('div', { class: 'seg' }, [{ key: 'all', label: 'All' }, ...STATUSES].map(o =>
+    c.draft = S.deals.filter(d => d.status === 'draft').length;
+    const seg = h('div', { class: 'seg' }, [{ key: 'all', label: 'All' }, ...TEAM_STATUSES].map(o =>
       h('button', { type: 'button', 'aria-pressed': String(S.dashFilter === o.key), onclick: () => { S.dashFilter = o.key; renderTeam(); } },
         o.key !== 'all' ? h('span', { class: 'dot st-' + o.key }) : null, o.label, h('span', { class: 'count', text: c[o.key] }))));
     const q = h('input', { class: 'input', type: 'search', placeholder: 'Search deals', 'aria-label': 'Search deals', value: S.dashQ });
@@ -912,7 +949,7 @@
       const list = sortDeals(S.deals.filter(d => (S.dashFilter === 'all' || d.status === S.dashFilter) && matches(d, S.dashQ)), 'new');
       if (!list.length) tbody.append(h('tr', {}, h('td', { colspan: '8', class: 'muted', text: S.deals.length ? 'No deals match.' : 'No deals yet. Click Add deal to post your first one.' })));
       for (const d of list) {
-        const sel = h('select', { class: 'select', 'aria-label': 'Status for ' + d.address }, STATUSES.map(s => h('option', { value: s.key, text: s.label })));
+        const sel = h('select', { class: 'select', 'aria-label': 'Status for ' + (d.address || 'draft') }, TEAM_STATUSES.map(s => h('option', { value: s.key, text: s.label })));
         sel.value = d.status;
         sel.addEventListener('change', () => saveStatus(d.id, sel.value));
         const fee = isNum(d.price) && isNum(d.contractPrice) ? d.price - d.contractPrice : null;
@@ -927,7 +964,7 @@
         resetActs();
         tbody.append(h('tr', {},
           h('td', {}, d.photos?.length ? h('img', { class: 'thumb', src: photoUrl(d.photos[0], true), alt: '' }) : h('div', { class: 'thumb noimg' }, icon('house'))),
-          h('td', {}, h('div', { class: 'addr', text: d.address }), h('div', { class: 'loc', text: locLine(d) })),
+          h('td', {}, h('div', { class: 'addr', text: d.address || 'Untitled draft' }), h('div', { class: 'loc', text: d.status === 'draft' ? 'Draft · not visible to buyers' : locLine(d) })),
           h('td', {}, sel),
           h('td', { class: 'r', text: money(d.price) }),
           h('td', { class: 'r', text: money(d.arv) }),

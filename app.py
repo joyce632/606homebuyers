@@ -205,7 +205,7 @@ def init_db():
 
 # ---------------------------------------------------------------- deal fields
 
-STATUSES = ("active", "pending", "sold", "closed")
+STATUSES = ("draft", "active", "pending", "sold", "closed")  # draft: team only, never public
 ROLES = ("admin", "editor")
 TEXT_FIELDS = {
     "address": 200, "city": 80, "zip": 10, "area": 80, "county": 60, "lot": 60, "type": 40,
@@ -221,7 +221,7 @@ PRIVATE_NUM = ("contractPrice",)
 PHOTO_RE = re.compile(r"^[a-f0-9]{32}$")
 
 
-def clean_deal(body):
+def clean_deal(body, draft=False):
     out = {}
     for k, n in {**TEXT_FIELDS, **PRIVATE_TEXT}.items():
         v = body.get(k)
@@ -244,8 +244,8 @@ def clean_deal(body):
     if out["strategy"] not in STRATEGIES:
         out["strategy"] = None
     out["comps"] = clean_comps(body.get("comps"))
-    if not out["address"]:
-        abort(400, "Add a street address.")
+    if not out["address"] and not draft:
+        abort(400, "Add a street address before publishing. You can save it as a draft without one.")
     return out
 
 
@@ -499,12 +499,14 @@ def delete_user(uid):
 def list_deals():
     private = bool(current_user())
     rows = db().all("SELECT * FROM deals ORDER BY created_at DESC")
-    return jsonify(deals=[deal_out(r, private) for r in rows])
+    return jsonify(deals=[deal_out(r, private) for r in rows if private or r["status"] != "draft"])
 
 
 @app.get("/api/deals/<did>")
 def get_deal(did):
-    r = db().one("SELECT * FROM deals WHERE id=?", (did,)) or abort(404, "Deal not found.")
+    r = db().one("SELECT * FROM deals WHERE id=?", (did,))
+    if not r or (r["status"] == "draft" and not current_user()):
+        abort(404, "Deal not found.")
     return jsonify(deal=deal_out(r, bool(current_user())))
 
 
@@ -532,9 +534,10 @@ def create_deal():
     body = request.get_json(silent=True) or {}
     did = uuid.uuid4().hex[:12]
     t = now_ms()
+    status = _status(body)
     db().execute(
         "INSERT INTO deals (id, status, data, photos, created_at, updated_at, created_by) VALUES (?,?,?,?,?,?,?)",
-        (did, _status(body), json.dumps(clean_deal(body)), json.dumps(_clean_photos(body)), t, t, g.user["id"]))
+        (did, status, json.dumps(clean_deal(body, status == "draft")), json.dumps(_clean_photos(body)), t, t, g.user["id"]))
     db().commit()
     return jsonify(deal=deal_out(db().one("SELECT * FROM deals WHERE id=?", (did,)), True))
 
@@ -545,8 +548,12 @@ def update_deal(did):
     old = db().one("SELECT * FROM deals WHERE id=?", (did,)) or abort(404, "Deal not found.")
     body = request.get_json(silent=True) or {}
     photos = _clean_photos(body)
+    status = _status(body)
+    # A draft's listing clock starts when it is first published.
+    if old["status"] == "draft" and status != "draft":
+        db().execute("UPDATE deals SET created_at=? WHERE id=?", (now_ms(), did))
     db().execute("UPDATE deals SET status=?, data=?, photos=?, updated_at=? WHERE id=?",
-                 (_status(body), json.dumps(clean_deal(body)), json.dumps(photos), now_ms(), did))
+                 (status, json.dumps(clean_deal(body, status == "draft")), json.dumps(photos), now_ms(), did))
     db().commit()
     for p in set(json.loads(old["photos"])) - set(photos):
         remove_photo_if_unused(p)
@@ -556,9 +563,14 @@ def update_deal(did):
 @app.patch("/api/deals/<did>/status")
 @require()
 def set_status(did):
-    db().one("SELECT id FROM deals WHERE id=?", (did,)) or abort(404, "Deal not found.")
+    old = db().one("SELECT * FROM deals WHERE id=?", (did,)) or abort(404, "Deal not found.")
     body = request.get_json(silent=True) or {}
-    db().execute("UPDATE deals SET status=?, updated_at=? WHERE id=?", (_status(body), now_ms(), did))
+    status = _status(body)
+    if status != "draft" and not json.loads(old["data"]).get("address"):
+        abort(400, "Add a street address before publishing this draft.")
+    if old["status"] == "draft" and status != "draft":
+        db().execute("UPDATE deals SET created_at=? WHERE id=?", (now_ms(), did))
+    db().execute("UPDATE deals SET status=?, updated_at=? WHERE id=?", (status, now_ms(), did))
     db().commit()
     return jsonify(deal=deal_out(db().one("SELECT * FROM deals WHERE id=?", (did,)), True))
 
@@ -678,7 +690,7 @@ def create_inquiry():
     body = _public_guard()
     name, email, phone = _contact_fields(body)
     deal_id = str(body.get("dealId") or "")[:20]
-    if not db().one("SELECT id FROM deals WHERE id=?", (deal_id,)):
+    if not db().one("SELECT id FROM deals WHERE id=? AND status<>'draft'", (deal_id,)):
         abort(400, "This deal is no longer listed.")
     kind = "offer" if body.get("kind") == "offer" else "inquiry"
     offer = _num(body.get("offer")) if kind == "offer" else None
@@ -874,6 +886,8 @@ def index():
 @app.get("/deal/<did>")
 def deal_page(did):
     r = db().one("SELECT * FROM deals WHERE id=?", (did,))
+    if r and r["status"] == "draft" and not current_user():
+        r = None
     return send_index(deal_out(r) if r else None)
 
 
