@@ -17,6 +17,8 @@
   const OCC = ['Vacant', 'Tenant occupied', 'Owner occupied', 'Partially occupied'];
   const CONDITIONS = ['Turnkey', 'Light rehab', 'Moderate rehab', 'Full rehab', 'Teardown / land value'];
   const BUYBOX_TYPES = ['Single family', '2-4 units', '5+ units', 'Condo / townhome', 'Mixed use', 'Vacant land'];
+  const BUYBOX_COUNTIES = ['Cook', 'DuPage', 'Will', 'Lake', 'Kane', 'McHenry', 'Kendall'];
+  const BUYBOX_FUNDING = ['Cash', 'Hard money / private lender', 'Conventional loan', 'DSCR / rental loan', 'Seller financing'];
   const ROLES = { admin: 'Admin', editor: 'Editor' };
 
   const S = {
@@ -583,24 +585,24 @@
       name: h('input', { class: 'input', id: 'bl-name', autocomplete: 'name', required: true }),
       email: h('input', { class: 'input', id: 'bl-email', type: 'email', autocomplete: 'email' }),
       phone: h('input', { class: 'input', id: 'bl-phone', type: 'tel', autocomplete: 'tel' }),
-      areas: h('input', { class: 'input', id: 'bl-areas', placeholder: 'e.g. Pilsen, Austin, south suburbs, all of Cook County' }),
+      areas: h('input', { class: 'input', id: 'bl-areas', placeholder: 'e.g. Pilsen, Austin, Oak Park, Joliet' }),
       maxPrice: h('input', { class: 'input num', id: 'bl-max', type: 'number', min: '0', step: '5000' }),
-      funding: h('select', { class: 'select', id: 'bl-funding' }, h('option', { value: '', text: 'Choose…' }),
-        h('option', { value: 'cash', text: 'Cash' }), h('option', { value: 'hard money', text: 'Hard money / private lender' }), h('option', { value: 'conventional', text: 'Conventional loan' })),
       notes: h('textarea', { class: 'textarea textarea-sm', id: 'bl-notes', placeholder: 'Anything else about your buy box' }),
       website: h('input', { class: 'hp', name: 'website', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true' }),
     };
     const checks = (name, items) => h('div', { class: 'checkgrid' }, items.map(([v, l]) =>
       h('label', { class: 'check' }, h('input', { type: 'checkbox', name, value: v }), h('span', { text: l }))));
     const types = checks('types', BUYBOX_TYPES.map(t => [t, t]));
+    const counties = checks('counties', BUYBOX_COUNTIES.map(c => [c, c + ' County']));
+    const funding = checks('funding', BUYBOX_FUNDING.map(x => [x, x]));
     const btn = h('button', { class: 'btn btn-primary btn-lg', type: 'submit' }, 'Join the buyers list');
     const picked = (box) => [...box.querySelectorAll('input:checked')].map(i => i.value);
     const form = h('form', { class: 'box buyer-form', novalidate: true, onsubmit: async e => {
       e.preventDefault(); err.hidden = true; btn.disabled = true;
       try {
         await api('POST', '/api/buyers', { name: f.name.value, email: f.email.value, phone: f.phone.value, areas: f.areas.value,
-          maxPrice: f.maxPrice.value, funding: f.funding.value, notes: f.notes.value, website: f.website.value,
-          types: picked(types) });
+          maxPrice: f.maxPrice.value, notes: f.notes.value, website: f.website.value,
+          types: picked(types), counties: picked(counties), funding: picked(funding) });
         form.replaceChildren(h('div', { class: 'sent' }, icon('check'), h('b', { text: "You're on the list" }),
           h('span', { text: "We'll send you matching deals as soon as they're under contract." }),
           h('a', { class: 'btn', href: '/#available', 'data-link': true }, 'Browse the deal board')));
@@ -611,11 +613,11 @@
       h('div', { class: 'two' },
         h('div', { class: 'field' }, h('label', { for: 'bl-phone', text: 'Phone' }), f.phone),
         h('div', { class: 'field' }, h('label', { for: 'bl-email', text: 'Email' }), f.email)),
-      h('div', { class: 'field' }, h('label', { for: 'bl-areas', text: 'Areas you buy in' }), f.areas),
+      h('fieldset', { class: 'field plain' }, h('legend', { text: 'Counties you buy in' }), counties),
+      h('div', { class: 'field' }, h('label', { for: 'bl-areas', text: 'Specific neighborhoods or cities (optional)' }), f.areas),
       h('fieldset', { class: 'field plain' }, h('legend', { text: 'Property types' }), types),
-      h('div', { class: 'two' },
-        h('div', { class: 'field' }, h('label', { for: 'bl-max', text: 'Max purchase price' }), h('div', { class: 'money' }, f.maxPrice)),
-        h('div', { class: 'field' }, h('label', { for: 'bl-funding', text: 'How you fund deals' }), f.funding)),
+      h('fieldset', { class: 'field plain' }, h('legend', { text: 'How you fund deals (pick all that apply)' }), funding),
+      h('div', { class: 'field' }, h('label', { for: 'bl-max', text: 'Max purchase price' }), h('div', { class: 'money' }, f.maxPrice)),
       h('div', { class: 'field' }, h('label', { for: 'bl-notes', text: 'Notes' }), f.notes),
       f.website, err, btn,
       h('p', { class: 'hint', text: 'We only use your details to send you deals. Ask us any time and we will remove you from the list.' }));
@@ -1001,9 +1003,9 @@
       resetActs();
       const buys = (b.types || []).join(', ');
       const tr = h('tr', {},
-        h('td', {}, h('b', { text: b.name }), b.funding ? h('div', { class: 'muted', text: 'Funds with ' + b.funding }) : null, b.notes ? h('div', { class: 'msg', text: b.notes }) : null),
+        h('td', {}, h('b', { text: b.name }), (b.funding || []).length ? h('div', { class: 'muted', text: 'Funds with ' + b.funding.join(', ') }) : null, b.notes ? h('div', { class: 'msg', text: b.notes }) : null),
         contactCell(b),
-        h('td', { text: b.areas || '—' }),
+        h('td', {}, (b.counties || []).length ? h('div', { text: b.counties.join(', ') }) : null, b.areas ? h('div', { class: 'muted', text: b.areas }) : null, !(b.counties || []).length && !b.areas ? '—' : null),
         h('td', { text: buys || '—' }),
         h('td', { class: 'r', text: money(b.maxPrice) }),
         h('td', { class: 'muted', text: ago(b.createdAt) }),

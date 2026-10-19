@@ -738,6 +738,23 @@ def delete_inquiry(iid):
 
 
 BUYBOX_TYPES = ("Single family", "2-4 units", "5+ units", "Condo / townhome", "Mixed use", "Vacant land")
+BUYBOX_COUNTIES = ("Cook", "DuPage", "Will", "Lake", "Kane", "McHenry", "Kendall")
+BUYBOX_FUNDING = ("Cash", "Hard money / private lender", "Conventional loan", "DSCR / rental loan", "Seller financing")
+
+
+def _picked(value, allowed):
+    """Checkbox answers: keep only known options, in the form's order."""
+    vals = value if isinstance(value, list) else [value]
+    return [a for a in allowed if a in vals]
+
+
+def _funding_list(b):
+    """Older sign-ups stored funding as one lowercase string."""
+    f = b.get("funding")
+    if isinstance(f, list):
+        return f
+    legacy = {"cash": "Cash", "hard money": "Hard money / private lender", "conventional": "Conventional loan"}
+    return [legacy.get(f, f)] if f else []
 
 
 @app.post("/api/buyers")
@@ -745,11 +762,11 @@ def create_buyer():
     body = _public_guard()
     name, email, phone = _contact_fields(body)
     data = {
+        "counties": _picked(body.get("counties"), BUYBOX_COUNTIES),
         "areas": str(body.get("areas") or "").strip()[:500] or None,
-        "types": [t for t in (body.get("types") or []) if t in BUYBOX_TYPES],
-        "strategies": [s for s in (body.get("strategies") or []) if s in STRATEGIES],
+        "types": _picked(body.get("types"), BUYBOX_TYPES),
         "maxPrice": _num(body.get("maxPrice")),
-        "funding": body.get("funding") if body.get("funding") in ("cash", "hard money", "conventional") else None,
+        "funding": _picked(body.get("funding"), BUYBOX_FUNDING),
         "notes": str(body.get("notes") or "").strip()[:1000] or None,
     }
     if email:
@@ -768,6 +785,8 @@ def create_buyer():
 def buyer_out(r):
     out = {"id": r["id"], "name": r["name"], "email": r["email"], "phone": r["phone"], "createdAt": r["created_at"]}
     out.update(json.loads(r["data"]))
+    out["funding"] = _funding_list(out)
+    out.setdefault("counties", [])
     return out
 
 
@@ -794,11 +813,11 @@ def export_buyers():
     from datetime import datetime
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["Name", "Email", "Phone", "Areas", "Property types", "Strategies", "Max price", "Funding", "Notes", "Signed up"])
+    w.writerow(["Name", "Email", "Phone", "Counties", "Neighborhoods / cities", "Property types", "Max price", "Funding", "Notes", "Signed up"])
     for r in db().all("SELECT * FROM buyers ORDER BY created_at DESC"):
         b = buyer_out(r)
-        row = [b["name"], b["email"] or "", b["phone"] or "", b.get("areas") or "", "; ".join(b.get("types") or []),
-               "; ".join(b.get("strategies") or []), b.get("maxPrice") or "", b.get("funding") or "", b.get("notes") or "",
+        row = [b["name"], b["email"] or "", b["phone"] or "", "; ".join(b["counties"]), b.get("areas") or "",
+               "; ".join(b.get("types") or []), b.get("maxPrice") or "", "; ".join(b["funding"]), b.get("notes") or "",
                datetime.fromtimestamp(b["createdAt"] / 1000).strftime("%Y-%m-%d")]
         # Neutralize spreadsheet formulas typed into public form fields.
         w.writerow(["'" + c if isinstance(c, str) and c[:1] in ("=", "+", "-", "@") else c for c in row])
