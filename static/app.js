@@ -23,7 +23,7 @@
     deals: [], loaded: false, loadError: false,
     settings: { phone: '', email: '', buyersListUrl: '', advisorName: '', dealsClosed: '', yearsInBusiness: '' },
     user: null, csrf: null,
-    filter: 'active', strategy: 'all', q: '', sort: 'new',
+    filter: 'active', q: '', sort: 'new',
     tab: 'deals', dashQ: '', dashFilter: 'all', newInquiries: 0,
   };
 
@@ -155,12 +155,12 @@
   function route(opts = {}) {
     const path = location.pathname;
     const m = path.match(/^\/deal\/([A-Za-z0-9]+)$/);
-    const view = m ? 'deal' : path === '/team' ? 'team' : path === '/buyers' ? 'buyers' : 'home';
-    for (const v of ['home', 'deal', 'team', 'buyers']) $('view-' + v).hidden = view !== v;
+    if (path === '/buyers') { history.replaceState({}, '', '/#join'); return route(opts); }
+    const view = m ? 'deal' : path === '/team' ? 'team' : 'home';
+    for (const v of ['home', 'deal', 'team']) $('view-' + v).hidden = view !== v;
     renderChrome();
     if (view === 'home') { renderHome(); document.title = '606 Home Buyers | Off-market deals in Chicagoland'; }
     if (view === 'deal') renderDealPage(m[1]);
-    if (view === 'buyers') { renderBuyers(); document.title = 'Join the buyers list | 606 Home Buyers'; }
     if (view === 'team') { renderTeam(); document.title = 'Team | 606 Home Buyers'; }
     if (location.hash && view === 'home') {
       const el = document.getElementById(location.hash.slice(1));
@@ -171,12 +171,10 @@
   function renderChrome() {
     const s = S.settings;
     const hasContact = !!(s.phone || s.email);
-    document.querySelectorAll('[data-contact]').forEach(b => { if (b.tagName === 'BUTTON' && b.closest('.cta-band')) b.hidden = !hasContact; });
     $('btn-dashboard').hidden = !S.user;
     const tp = $('top-phone');
     tp.hidden = !s.phone;
     if (s.phone) { tp.href = telHref(s.phone); tp.querySelector('span').textContent = s.phone; }
-    $('nav-sold').hidden = !S.deals.some(d => d.status === 'sold' || d.status === 'closed');
     const fc = $('foot-contact'); fc.replaceChildren();
     if (s.phone) fc.append(h('a', { href: telHref(s.phone) }, icon('phone'), s.phone));
     if (s.email) fc.append(h('a', { href: 'mailto:' + s.email }, icon('mail'), s.email));
@@ -211,7 +209,6 @@
   $('sort').value = S.sort;
   $('q').addEventListener('input', e => { S.q = e.target.value; renderGrid(); });
   $('sort').addEventListener('change', e => { S.sort = e.target.value; store.set('606.sort', S.sort); renderGrid(); });
-  $('strategy').addEventListener('change', e => { S.strategy = e.target.value; renderGrid(); });
 
   function counts(list) {
     const c = { all: list.length };
@@ -248,7 +245,7 @@
       h('div', { class: 'card-body' },
         h('div', { class: 'price-row' },
           h('span', { class: 'price', text: money(d.price) }),
-          d.strategy ? h('span', { class: 'strat-tag', text: STRATEGY[d.strategy] }) : null),
+          null),
         isNum(d.arv) ? h('div', { class: 'arv', text: 'ARV ' + money(d.arv) }) : null,
         h('div', { class: 'loc' }, icon('pin'), h('span', { text: [d.address, locLine(d)].filter(Boolean).join(', ') })),
         eq != null && eq > 0 ? h('div', { class: 'equity' }, h('b', { text: money(eq) }), ' ' + equityLabel(d)) : null,
@@ -273,34 +270,8 @@
         (discounts.length ? ` · up to ${Math.max(...discounts)}% below ARV` : '');
     } else $('live-chip').hidden = true;
 
-    // Stats bar: only figures we can back up.
-    const stats = [];
-    if (S.loaded) stats.push([String(act.length), 'Deals available now']);
-    const soldCount = Number(S.settings.dealsClosed) || (c.sold + c.closed);
-    if (soldCount) stats.push([soldCount + (S.settings.dealsClosed ? '+' : ''), 'Deals closed']);
-    if (discounts.length) stats.push([Math.round(avg(discounts)) + '%', 'Avg. below ARV']);
-    if (Number(S.settings.yearsInBusiness)) stats.push([S.settings.yearsInBusiness + '+', 'Years in business']);
-    stats.push(['Chicagoland', 'City & suburbs']);
-    $('stats').hidden = !S.loaded;
-    $('stats-in').replaceChildren(...stats.slice(0, 4).map(([v, l]) => h('div', { class: 'stat' }, h('b', { text: v }), h('span', { text: l }))));
-
     renderGrid();
-    renderStrategies();
-
-    const sold = S.deals.filter(d => d.status === 'sold' || d.status === 'closed').sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8);
-    $('sold').hidden = !sold.length;
-    $('sold-row').replaceChildren(...sold.map(d => h('a', { class: 'sold-card', href: '/deal/' + d.id, 'data-link': true },
-      h('div', { class: 'media' }, (d.photos || []).length ? h('img', { src: photoUrl(d.photos[0], true), alt: '', loading: 'lazy' }) : h('div', { class: 'noimg' }, icon('house')),
-        h('span', { class: 'sold-badge', text: STATUS_LABEL[d.status] })),
-      h('div', { class: 'sold-body' }, h('b', { text: placeName(d) }), h('span', { text: [d.type, d.zip].filter(Boolean).join(' · ') })))));
-
-    const areas = {};
-    for (const d of publicDeals()) { const k = d.area || d.city; if (k) areas[k] = (areas[k] || 0) + 1; }
-    const keys = Object.keys(areas).sort((a, b) => areas[b] - areas[a]);
-    $('areas').hidden = !keys.length;
-    $('area-chips').replaceChildren(...keys.map(k => h('button', { class: 'chip', type: 'button', onclick: () => {
-      S.q = k; $('q').value = k; S.filter = 'all'; renderGrid(); $('available').scrollIntoView();
-    } }, icon('pin'), k, h('span', { class: 'count', text: areas[k] }))));
+    if (!$('join-slot').firstChild) $('join-slot').append(buyersSection());
   }
 
   function renderGrid() {
@@ -313,7 +284,6 @@
         onclick: () => { S.filter = o.key; store.set('606.filter2', o.key); renderGrid(); },
       }, o.key !== 'all' ? h('span', { class: 'dot st-' + o.key }) : null, o.label, h('span', { class: 'count', text: c[o.key] })));
     }
-    $('strategy').value = S.strategy;
     const grid = $('grid'), empty = $('empty-slot');
     grid.replaceChildren(); empty.replaceChildren();
     $('avail-count').textContent = '';
@@ -323,39 +293,17 @@
       empty.append(h('div', { class: 'empty' }, h('div', { class: 'noimg' }, icon('house')),
         h('h2', { text: 'New deals are on the way' }),
         h('p', { text: 'There are no properties listed right now. Join the buyers list to hear about the next one first.' }),
-        h('a', { class: 'btn btn-primary', href: '/buyers', 'data-link': true }, 'Join the buyers list')));
+        h('a', { class: 'btn btn-primary', href: '/#join', 'data-link': true }, 'Join the buyers list')));
       return;
     }
-    const list = sortDeals(all.filter(d => (S.filter === 'all' || d.status === S.filter) &&
-      (S.strategy === 'all' || d.strategy === S.strategy) && matches(d, S.q)), S.sort);
+    const list = sortDeals(all.filter(d => (S.filter === 'all' || d.status === S.filter) && matches(d, S.q)), S.sort);
     $('avail-count').textContent = `${list.length} ${list.length === 1 ? 'property' : 'properties'}`;
     if (!list.length) {
       empty.append(h('div', { class: 'empty' }, h('p', { text: 'No deals match these filters.' }),
-        h('button', { class: 'btn', type: 'button', onclick: () => { S.filter = 'all'; S.strategy = 'all'; S.q = ''; $('q').value = ''; renderGrid(); } }, 'Clear filters')));
+        h('button', { class: 'btn', type: 'button', onclick: () => { S.filter = 'all'; S.q = ''; $('q').value = ''; renderGrid(); } }, 'Clear filters')));
       return;
     }
     for (const d of list) grid.append(dealCard(d));
-  }
-
-  function renderStrategies() {
-    const act = activeDeals();
-    const of = k => act.filter(d => d.strategy === k);
-    const flips = of('flip'), rentals = of('rental'), whole = of('wholesale');
-    const avgBelow = l => { const a = l.map(below).filter(x => x != null); return a.length ? Math.round(avg(a)) + '%' : null; };
-    const yieldOf = l => { const a = l.filter(d => isNum(d.rent) && isNum(d.price) && d.price > 0).map(d => d.rent * 12 / (d.price + (Number(d.repairs) || 0)) * 100); return a.length ? avg(a).toFixed(1) + '%' : null; };
-    const avgEq = l => { const a = l.map(equity).filter(x => x != null && x > 0); return a.length ? money(avg(a)) : null; };
-    const cards = [
-      ['flip', 'tool', 'Fix & flip', 'Distressed homes with room for a full rehab. Each listing has an ARV, repair estimate and spread so you can check the margin.', avgBelow(flips), 'Avg. below ARV', flips.length],
-      ['rental', 'key', 'Buy & hold / BRRRR', '2-flats, 3-flats and single-family rentals with current or market rent so you can run the cash flow.', yieldOf(rentals), 'Avg. gross yield, all-in', rentals.length],
-      ['wholesale', 'doc', 'Wholesale', 'Assignable contracts at a discount for buyers who move fast, with the earnest money and close-by date listed up front.', avgEq(whole), 'Avg. equity after repairs', whole.length],
-    ];
-    $('strat-grid').replaceChildren(...cards.map(([k, ic, title, text, metric, label, n]) => h('div', { class: 'strat' },
-      h('div', { class: 'strat-icon' }, icon(ic)),
-      h('h3', { text: title }),
-      h('p', { text }),
-      h('div', { class: 'strat-metric' }, h('b', { text: metric || String(n) }), h('span', { text: metric ? label : (n === 1 ? 'deal available now' : 'deals available now') })),
-      n ? h('button', { class: 'btn', type: 'button', onclick: () => { S.strategy = k; S.filter = 'active'; renderGrid(); $('available').scrollIntoView(); } }, `View ${n} ${title.split(' /')[0].toLowerCase()} ${n === 1 ? 'deal' : 'deals'}`, icon('arrow'))
-        : h('a', { class: 'btn', href: '/buyers', 'data-link': true }, 'Get notified of new ones', icon('arrow')))));
   }
 
   /* ---------- single deal ---------- */
@@ -435,7 +383,6 @@
 
     const head = h('div', { class: 'deal-head' },
       h('div', { class: 'tags' }, pill(d.status),
-        d.strategy ? h('span', { class: 'strat-tag', text: STRATEGY[d.strategy] }) : null,
         pct != null && d.status === 'active' ? h('span', { class: 'disc', text: pct + '% below ARV' }) : null),
       h('h1', { text: d.address || 'Untitled draft' }),
       h('div', { class: 'loc' }, icon('pin'), h('span', { text: locLine(d) })),
@@ -629,8 +576,7 @@
   }
 
   /* ---------- buyers list sign-up ---------- */
-  function renderBuyers() {
-    const root = $('view-buyers'); root.replaceChildren();
+  function buyersSection() {
     const err = h('div', { class: 'err', hidden: true });
     const f = {
       name: h('input', { class: 'input', id: 'bl-name', autocomplete: 'name', required: true }),
@@ -646,7 +592,6 @@
     const checks = (name, items) => h('div', { class: 'checkgrid' }, items.map(([v, l]) =>
       h('label', { class: 'check' }, h('input', { type: 'checkbox', name, value: v }), h('span', { text: l }))));
     const types = checks('types', BUYBOX_TYPES.map(t => [t, t]));
-    const strats = checks('strategies', Object.entries({ flip: 'Fix & flip', rental: 'Buy & hold / BRRRR', wholesale: 'Wholesale' }));
     const btn = h('button', { class: 'btn btn-primary btn-lg', type: 'submit' }, 'Join the buyers list');
     const picked = (box) => [...box.querySelectorAll('input:checked')].map(i => i.value);
     const form = h('form', { class: 'box buyer-form', novalidate: true, onsubmit: async e => {
@@ -654,10 +599,10 @@
       try {
         await api('POST', '/api/buyers', { name: f.name.value, email: f.email.value, phone: f.phone.value, areas: f.areas.value,
           maxPrice: f.maxPrice.value, funding: f.funding.value, notes: f.notes.value, website: f.website.value,
-          types: picked(types), strategies: picked(strats) });
+          types: picked(types) });
         form.replaceChildren(h('div', { class: 'sent' }, icon('check'), h('b', { text: "You're on the list" }),
           h('span', { text: "We'll send you matching deals as soon as they're under contract." }),
-          h('a', { class: 'btn', href: '/#available', 'data-link': true }, 'Browse current deals')));
+          h('a', { class: 'btn', href: '/#available', 'data-link': true }, 'Browse the deal board')));
       } catch (ex) { err.hidden = false; err.textContent = ex.message; btn.disabled = false; }
     } },
       h('h2', { text: 'Your buy box' }),
@@ -667,17 +612,16 @@
         h('div', { class: 'field' }, h('label', { for: 'bl-email', text: 'Email' }), f.email)),
       h('div', { class: 'field' }, h('label', { for: 'bl-areas', text: 'Areas you buy in' }), f.areas),
       h('fieldset', { class: 'field plain' }, h('legend', { text: 'Property types' }), types),
-      h('fieldset', { class: 'field plain' }, h('legend', { text: 'Strategies' }), strats),
       h('div', { class: 'two' },
         h('div', { class: 'field' }, h('label', { for: 'bl-max', text: 'Max purchase price' }), h('div', { class: 'money' }, f.maxPrice)),
         h('div', { class: 'field' }, h('label', { for: 'bl-funding', text: 'How you fund deals' }), f.funding)),
       h('div', { class: 'field' }, h('label', { for: 'bl-notes', text: 'Notes' }), f.notes),
       f.website, err, btn,
       h('p', { class: 'hint', text: 'We only use your details to send you deals. Ask us any time and we will remove you from the list.' }));
-    root.append(h('div', { class: 'buyers-layout' },
+    return h('div', { class: 'buyers-layout' },
       h('div', { class: 'buyers-pitch' },
         h('div', { class: 'kicker', text: 'Buyers list' }),
-        h('h1', { text: 'Get off-market deals before they hit the site' }),
+        h('h2', { text: 'Get off-market deals before they hit the site' }),
         h('p', { class: 'lede', text: 'Tell us what you buy. When a property that fits goes under contract, you hear about it first.' }),
         h('ul', { class: 'checks' }, [
           'Deals matched to your areas, property types and price range',
@@ -685,7 +629,7 @@
           'Direct line to our dispositions team',
           'No cost, no obligation',
         ].map(t => h('li', {}, icon('check'), h('span', { text: t }))))),
-      form));
+      form);
   }
 
   /* ---------- deal editor ---------- */
@@ -697,7 +641,7 @@
     h('input', { type: 'radio', name: 'status', value: s.key, id: 'f-st-' + s.key }), h('span', { class: 'pill st-' + s.key, text: s.label }))));
 
   const NUMS = { beds: 'beds', baths: 'baths', sqft: 'sqft', year: 'year', units: 'units', price: 'price', arv: 'arv', repairs: 'repairs', rent: 'rent', emd: 'emd', contract: 'contractPrice' };
-  const TEXTS = { address: 'address', city: 'city', zip: 'zip', area: 'area', county: 'county', lot: 'lot', type: 'type', occ: 'occupancy', close: 'closeBy', access: 'access', desc: 'description', hl: 'highlights', seller: 'sellerName', sellerphone: 'sellerPhone', notes: 'internalNotes', strategy: 'strategy', condition: 'condition', parking: 'parking' };
+  const TEXTS = { address: 'address', city: 'city', zip: 'zip', area: 'area', county: 'county', lot: 'lot', type: 'type', occ: 'occupancy', close: 'closeBy', access: 'access', desc: 'description', hl: 'highlights', seller: 'sellerName', sellerphone: 'sellerPhone', notes: 'internalNotes', condition: 'condition', parking: 'parking' };
   const COMP_FIELDS = [['status', 'Status'], ['address', 'Address'], ['beds', 'Beds'], ['baths', 'Baths'], ['sqft', 'Sq ft'], ['price', 'Price'], ['distance', 'Miles']];
   let editOrig = null, photos = [], sessionUploads = new Set(), uploading = 0;
 
@@ -827,7 +771,7 @@
     const sample = {
       address: '1234 W Sample St', city: 'Chicago', zip: '60608', area: 'Pilsen', county: 'Cook', type: '2-flat',
       beds: 5, baths: 2, sqft: 2280, lot: '25 x 125', year: 1904, units: 2, occ: 'Vacant', parking: '2-car garage',
-      price: 239000, arv: 465000, repairs: 118000, rent: 3100, emd: 5000, strategy: 'rental', condition: 'Full rehab',
+      price: 239000, arv: 465000, repairs: 118000, rent: 3100, emd: 5000, condition: 'Full rehab',
       desc: 'SAMPLE LISTING FOR TESTING. This is not a real property.\n\nBrick 2-flat with both units vacant and ready for a full rehab. Renovated 2-flats nearby trade around $450-480k.',
       hl: 'Both units vacant\nSeparate furnaces and meters\nNear the Pink Line',
       notes: 'Sample deal. Delete when done testing.',
@@ -1054,7 +998,7 @@
           h('button', { class: 'btn btn-sm btn-danger-solid', type: 'button', onclick: async () => {
             try { await api('DELETE', '/api/buyers/' + b.id); tr.remove(); toast('Buyer removed'); } catch (e) { toast(e.message); } } }, 'Remove'))) }, 'Remove'));
       resetActs();
-      const buys = [...(b.types || []), ...(b.strategies || []).map(s => STRATEGY[s])].join(', ');
+      const buys = (b.types || []).join(', ');
       const tr = h('tr', {},
         h('td', {}, h('b', { text: b.name }), b.funding ? h('div', { class: 'muted', text: 'Funds with ' + b.funding }) : null, b.notes ? h('div', { class: 'msg', text: b.notes }) : null),
         contactCell(b),
@@ -1148,8 +1092,6 @@
       phone: inp('st-phone', 'phone', 'tel', '(312) 555-0100'),
       email: inp('st-email', 'email', 'email', 'deals@606homebuyers.com'),
       advisorName: inp('st-adv', 'advisorName', 'text', 'e.g. Marcus Lee'),
-      dealsClosed: inp('st-closed', 'dealsClosed', 'number', 'e.g. 120'),
-      yearsInBusiness: inp('st-years', 'yearsInBusiness', 'number', 'e.g. 8'),
     };
     return h('form', { class: 'panel narrow', onsubmit: async e => {
       e.preventDefault(); err.hidden = true;
@@ -1165,10 +1107,6 @@
         h('div', { class: 'field' }, h('label', { for: 'st-phone', text: 'Phone' }), f.phone),
         h('div', { class: 'field' }, h('label', { for: 'st-email', text: 'Email' }), f.email),
         h('div', { class: 'field' }, h('label', { for: 'st-adv', text: 'Dispositions contact name' }), f.advisorName, h('span', { class: 'hint', text: 'Shown next to the offer form on each deal.' })),
-        h('div', { class: 'two' },
-          h('div', { class: 'field' }, h('label', { for: 'st-closed', text: 'Deals closed to date' }), f.dealsClosed),
-          h('div', { class: 'field' }, h('label', { for: 'st-years', text: 'Years in business' }), f.yearsInBusiness)),
-        h('span', { class: 'hint', text: 'Shown in the stats bar on the home page. Only enter numbers you can back up. If deals closed is empty, the site counts your Sold and Closed deals.' }),
         err, h('div', {}, h('button', { class: 'btn btn-primary', type: 'submit' }, 'Save settings'))));
   }
 

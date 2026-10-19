@@ -556,3 +556,11 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 
 .comp-row .input, .comp-row .select { padding: 7px 8px; font-size: 13.5px; }
 @media (max-width: 760px) { .comp-row { grid-template-columns: 1fr 1fr 1fr; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-sm); } .comp-row [data-k="address"] { grid-column: 1 / -1; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Simplified home: short header, deal board, buyers list */
+.hero-compact .hero-in { padding-block: 64px 56px; }
+.hero-compact h1 { font-size: clamp(32px, 5vw, 52px); margin-bottom: 20px; }
+.hero-compact .live-chip { margin-bottom: 24px; }
+@media (max-width: 640px) { .hero-compact .hero-in { padding-block: 44px 40px; } }
+.join { background: var(--surface); border-top: 1px solid var(--line); margin-top: 16px; scroll-margin-top: 68px; }
+.join .buyers-pitch h2 { font-size: clamp(28px, 4vw, 40px); line-height: 1.1; letter-spacing: -.02em; }

@@ -18,8 +18,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Fredoka:wght@700&display=swap">
-<link rel="stylesheet" href="/static/styles.css?v=5">
-<script src="/static/app.js?v=4" defer></script>
+<link rel="stylesheet" href="/static/styles.css?v=6">
+<script src="/static/app.js?v=5" defer></script>
 </head>
 <body>
 
@@ -75,14 +75,12 @@
     </a>
     <nav class="nav" aria-label="Main">
       <a href="/#available" data-link>Deals</a>
-      <a href="/#strategies" data-link>Strategies</a>
-      <a href="/#process" data-link>How it works</a>
-      <a href="/#sold" data-link id="nav-sold" hidden>Sold</a>
+      <a href="/#join" data-link>Buyers list</a>
     </nav>
     <div class="top-right">
       <a class="top-phone" id="top-phone" hidden><svg><use href="#i-phone"/></svg><span></span></a>
       <a class="btn" href="/team" data-link id="btn-dashboard" hidden>Dashboard</a>
-      <a class="btn btn-primary" href="/buyers" data-link id="btn-join">Join buyers list</a>
+      <a class="btn btn-primary" href="/#join" data-link id="btn-join">Join buyers list</a>
     </div>
   </div>
 </header>
@@ -90,27 +88,24 @@
 <main>
   <!-- Home -->
   <section id="view-home" hidden>
-    <div class="hero" id="hero">
+    <div class="hero hero-compact" id="hero">
       <div class="hero-bg" id="hero-bg"></div>
       <div class="wrap hero-in">
         <div class="eyebrow"><svg class="star"><use href="#i-star"/></svg>Chicagoland &amp; Illinois · Off-market real estate</div>
-        <h1>Find your next<br><em>Chicago investment property.</em></h1>
-        <p class="hero-lede">Off-market deals from 606 Home Buyers with the asking price, ARV, repair estimate and comps on every listing. Built for cash buyers, rehabbers and landlords.</p>
+        <h1>Off-market deals in <em>Chicagoland.</em></h1>
         <div class="live-chip" id="live-chip" hidden><span class="pulse"></span><span id="live-text"></span></div>
         <div class="hero-cta">
           <a class="btn btn-light btn-lg" href="/#available" data-link>Browse deals<svg><use href="#i-arrow"/></svg></a>
-          <a class="btn btn-outline-light btn-lg" href="/buyers" data-link>Get deals first</a>
+          <a class="btn btn-outline-light btn-lg" href="/#join" data-link>Join the buyers list</a>
         </div>
       </div>
     </div>
 
-    <div class="stats" id="stats" hidden><div class="wrap stats-in" id="stats-in"></div></div>
-
     <div class="wrap">
       <div class="section-head" id="available">
         <div>
-          <div class="kicker">Available now</div>
-          <h2>Today's investment deals</h2>
+          <div class="kicker">Deal board</div>
+          <h2>Available deals</h2>
         </div>
         <span class="muted num" id="avail-count"></span>
       </div>
@@ -118,12 +113,6 @@
         <div class="seg" id="seg" role="group" aria-label="Filter by status"></div>
         <div class="toolbar-right">
           <label class="search"><svg><use href="#i-search"/></svg><input class="input" id="q" type="search" placeholder="Search address, area, ZIP" aria-label="Search deals"></label>
-          <select class="select" id="strategy" aria-label="Filter by strategy">
-            <option value="all">All strategies</option>
-            <option value="flip">Fix &amp; flip</option>
-            <option value="rental">Buy &amp; hold</option>
-            <option value="wholesale">Wholesale</option>
-          </select>
           <select class="select" id="sort" aria-label="Sort deals">
             <option value="new">Newest first</option>
             <option value="discount">Biggest discount</option>
@@ -136,92 +125,13 @@
       <div id="empty-slot"></div>
     </div>
 
-    <section class="band" id="strategies">
-      <div class="wrap">
-        <div class="section-head center">
-          <div>
-            <div class="kicker">Investment strategies</div>
-            <h2>Deals for every strategy</h2>
-            <p>Whether you flip, hold or wholesale, every listing comes with the numbers you need to underwrite it.</p>
-          </div>
-        </div>
-        <div class="strat-grid" id="strat-grid"></div>
-      </div>
-    </section>
-
-    <section class="wrap process" id="process">
-      <div class="section-head center">
-        <div>
-          <div class="kicker">How it works</div>
-          <h2>From first look to closing</h2>
-        </div>
-      </div>
-      <ol class="steps">
-        <li><span class="n">1</span><b>Join the buyers list</b><span>Tell us your areas, property types and price range so we send you the right deals first.</span></li>
-        <li><span class="n">2</span><b>Review the deal</b><span>Photos, ARV, repair estimate, comps and occupancy are on every listing.</span></li>
-        <li><span class="n">3</span><b>Walk the property</b><span>Schedule access with our dispositions team and verify the numbers yourself.</span></li>
-        <li><span class="n">4</span><b>Sign and close</b><span>Sign the assignment, post earnest money and close with title by the listed date.</span></li>
-      </ol>
-      <div class="center-cta"><a class="btn btn-primary btn-lg" href="/#available" data-link>Browse properties</a></div>
-    </section>
-
-    <section class="band band-navy">
-      <div class="wrap">
-        <div class="section-head center">
-          <div>
-            <div class="kicker">Why 606 Home Buyers</div>
-            <h2>Invest with confidence</h2>
-            <p>We're a Chicago-based wholesaler. We put the full picture on every deal so you can decide quickly.</p>
-          </div>
-        </div>
-        <div class="why">
-          <div><svg><use href="#i-chart"/></svg><b>Numbers up front</b><span>Asking price, ARV, repair estimate and spread on every listing, with comparable sales where we have them.</span></div>
-          <div><svg><use href="#i-pin"/></svg><b>Chicagoland focus</b><span>City neighborhoods and collar-county suburbs we know block by block.</span></div>
-          <div><svg><use href="#i-doc"/></svg><b>Clean assignments</b><span>Clear contracts, earnest money terms and a target closing date on every deal.</span></div>
-          <div><svg><use href="#i-user"/></svg><b>A direct line</b><span>Talk to our dispositions team, not a call center, from first question to closing.</span></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="wrap" id="sold" hidden>
-      <div class="section-head">
-        <div>
-          <div class="kicker">Track record</div>
-          <h2>Recently sold</h2>
-        </div>
-      </div>
-      <div class="sold-row" id="sold-row"></div>
-    </section>
-
-    <section class="wrap" id="areas" hidden>
-      <div class="section-head">
-        <div>
-          <div class="kicker">Service area</div>
-          <h2>Where our deals are</h2>
-        </div>
-      </div>
-      <div class="chips" id="area-chips"></div>
-    </section>
-
-    <section class="wrap">
-      <div class="cta-band">
-        <div>
-          <h2>Get deals before they hit the site</h2>
-          <p>Join the 606 buyers list. Tell us what you buy and we'll send matching deals as soon as they're under contract.</p>
-        </div>
-        <div class="hero-cta">
-          <a class="btn btn-light btn-lg" href="/buyers" data-link>Join the buyers list</a>
-          <button class="btn btn-outline-light btn-lg" type="button" data-contact hidden>Contact us</button>
-        </div>
-      </div>
+    <section class="join" id="join">
+      <div class="wrap" id="join-slot"></div>
     </section>
   </section>
 
   <!-- Single deal -->
   <section id="view-deal" class="wrap" hidden></section>
-
-  <!-- Buyers list sign-up -->
-  <section id="view-buyers" class="wrap" hidden></section>
 
   <!-- Team -->
   <section id="view-team" class="wrap" hidden></section>
@@ -235,11 +145,9 @@
       <a class="btn btn-sm btn-primary" href="/#available" data-link>Browse properties</a>
     </div>
     <div>
-      <h3>Marketplace</h3>
-      <a href="/#available" data-link>All deals</a>
-      <a href="/#strategies" data-link>Strategies</a>
-      <a href="/#process" data-link>How it works</a>
-      <a href="/buyers" data-link>Buyers list</a>
+      <h3>Deals</h3>
+      <a href="/#available" data-link>Deal board</a>
+      <a href="/#join" data-link>Join the buyers list</a>
     </div>
     <div>
       <h3>Company</h3>
@@ -289,12 +197,9 @@
   <form class="dlg-body" id="deal-form" novalidate>
     <div class="form">
       <fieldset class="fs">
-        <legend>Status when published &amp; strategy</legend>
+        <legend>Status when published</legend>
         <div class="status-pick" id="f-status"></div>
         <div class="row">
-          <div class="field"><label for="f-strategy">Best for</label><select class="select" id="f-strategy">
-            <option value="">Choose…</option><option value="flip">Fix &amp; flip</option><option value="rental">Buy &amp; hold / BRRRR</option><option value="wholesale">Wholesale</option>
-          </select></div>
           <div class="field"><label for="f-condition">Condition</label><select class="select" id="f-condition"></select></div>
         </div>
       </fieldset>
