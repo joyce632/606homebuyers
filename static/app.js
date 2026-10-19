@@ -164,7 +164,8 @@
     if (view === 'team') { renderTeam(); document.title = 'Team | 606 Home Buyers'; }
     if (location.hash && view === 'home') {
       const el = document.getElementById(location.hash.slice(1));
-      if (el) requestAnimationFrame(() => el.scrollIntoView());
+      // A timer, not requestAnimationFrame: rAF can stall in background tabs and the scroll never happens.
+      if (el) setTimeout(() => el.scrollIntoView({ behavior: opts.instant ? 'instant' : 'smooth', block: 'start' }), 0);
     } else if (!opts.keepScroll) window.scrollTo(0, 0);
   }
 
@@ -1115,7 +1116,7 @@
     route({ keepScroll: true });
     await Promise.all([loadMe(), loadSettings()]);
     await loadDeals();
-    route({ keepScroll: !location.hash });
+    route({ keepScroll: !location.hash, instant: true });
     refreshInquiryBadge();
   })();
 })();
