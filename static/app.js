@@ -82,8 +82,7 @@
     return [d.area, cityzip].filter(Boolean).join(' · ');
   }
   const placeName = d => d.area ? `${d.area}, ${d.city || 'Chicago'}` : (d.city || 'Chicago');
-  // Discount to ARV and equity: the two numbers investors scan for first.
-  const below = d => isNum(d.arv) && isNum(d.price) && d.arv > 0 && d.arv > d.price ? Math.round((d.arv - d.price) / d.arv * 100) : null;
+  // Equity: ARV minus price, minus repairs when we have them.
   const equity = d => isNum(d.arv) && isNum(d.price) ? d.arv - d.price - (Number(d.repairs) || 0) : null;
   const equityLabel = d => isNum(d.repairs) ? 'est. equity after repairs' : 'spread to ARV';
   const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
@@ -209,6 +208,7 @@
   /* ---------- home ---------- */
   S.filter = store.get('606.filter2') || 'active';
   S.sort = store.get('606.sort') || 'new';
+  if (!['new', 'low', 'high'].includes(S.sort)) S.sort = 'new';
   $('sort').value = S.sort;
   $('q').addEventListener('input', e => { S.q = e.target.value; renderGrid(); });
   $('sort').addEventListener('change', e => { S.sort = e.target.value; store.set('606.sort', S.sort); renderGrid(); });
@@ -222,7 +222,6 @@
     const p = d => (isNum(d.price) ? Number(d.price) : null);
     if (sort === 'low') list.sort((a, b) => (p(a) ?? 1e15) - (p(b) ?? 1e15));
     else if (sort === 'high') list.sort((a, b) => (p(b) ?? -1) - (p(a) ?? -1));
-    else if (sort === 'discount') list.sort((a, b) => (below(b) ?? -1) - (below(a) ?? -1));
     else list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     return list;
   }
@@ -233,7 +232,7 @@
 
   function dealCard(d) {
     const photos = d.photos || [];
-    const pct = below(d), eq = equity(d);
+    const eq = equity(d);
     const facts = [];
     if (isNum(d.beds)) facts.push(h('li', {}, icon('bed'), h('b', { text: numf(d.beds) }), ' bd'));
     if (isNum(d.baths)) facts.push(h('li', {}, icon('bath'), h('b', { text: numf(d.baths) }), ' ba'));
@@ -242,7 +241,7 @@
       h('div', { class: 'media' },
         photos.length ? h('img', { src: photoUrl(photos[0], true), alt: '', loading: 'lazy' }) : h('div', { class: 'noimg' }, icon('house')),
         h('div', { class: 'media-tags' },
-          pct != null && d.status === 'active' ? h('span', { class: 'disc', text: pct + '% below ARV' }) : h('span'),
+          h('span'),
           pill(d.status)),
         photos.length > 1 ? h('span', { class: 'pcount' }, icon('cam'), String(photos.length)) : null),
       h('div', { class: 'card-body' },
@@ -266,11 +265,9 @@
     const cover = act.find(d => (d.photos || []).length);
     $('hero-bg').style.backgroundImage = cover ? `url("${photoUrl(cover.photos[0])}")` : '';
     $('hero').classList.toggle('has-photo', !!cover);
-    const discounts = act.map(below).filter(x => x != null);
     if (S.loaded && act.length) {
       $('live-chip').hidden = false;
-      $('live-text').textContent = `${act.length} ${act.length === 1 ? 'deal' : 'deals'} available now` +
-        (discounts.length ? ` · up to ${Math.max(...discounts)}% below ARV` : '');
+      $('live-text').textContent = `${act.length} ${act.length === 1 ? 'deal' : 'deals'} available now`;
     } else $('live-chip').hidden = true;
 
     renderGrid();
@@ -355,7 +352,6 @@
     document.title = `${d.address || 'Untitled draft'} · ${placeName(d)} | 606 Home Buyers`;
     if (d.status === 'draft') root.append(h('div', { class: 'notice draft-banner' }, icon('lock'),
       h('span', { text: 'Draft. Only your team can see this page. Publish it from the editor when it is ready for buyers.' })));
-    const pct = below(d), eq = equity(d);
 
     const facts = [];
     if (isNum(d.beds)) facts.push([icon('bed'), numf(d.beds), 'Beds']);
@@ -386,7 +382,7 @@
 
     const head = h('div', { class: 'deal-head' },
       h('div', { class: 'tags' }, pill(d.status),
-        pct != null && d.status === 'active' ? h('span', { class: 'disc', text: pct + '% below ARV' }) : null),
+        null),
       h('h1', { text: d.address || 'Untitled draft' }),
       h('div', { class: 'loc' }, icon('pin'), h('span', { text: locLine(d) })),
       h('div', { class: 'head-row' },
@@ -417,13 +413,13 @@
     }
     if (isNum(d.emd)) lines.push(['Earnest money', money(d.emd)]);
     if (d.closeBy) lines.push(['Close by', fmtDate(d.closeBy)]);
-    const eq = equity(d), pct = below(d);
+    const eq = equity(d);
     return h('section', { class: 'box' },
       h('h2', { text: 'Deal analysis' }),
       h('div', { class: 'numbers' },
         lines.map(([k, v]) => h('div', { class: 'line' }, h('span', { text: k }), h('span', { text: v }))),
         eq != null ? h('div', { class: 'line total' }, h('span', { text: isNum(d.repairs) ? 'Est. equity after repairs' : 'Spread to ARV' }),
-          h('span', { class: eq > 0 ? 'pos' : null, text: money(eq) + (pct != null ? ` (${pct}% below ARV)` : '') })) : null),
+          h('span', { class: eq > 0 ? 'pos' : null, text: money(eq) })) : null),
       h('p', { class: 'hint', text: 'Estimates only. Verify repairs and value with your own walkthrough and comps.' }));
   }
 
@@ -454,13 +450,12 @@
   }
 
   function priceCard(d) {
-    const pct = below(d), eq = equity(d), s = S.settings;
+    const eq = equity(d), s = S.settings;
     const card = h('div', { class: 'box price-card', id: 'inquiry' },
       h('div', { class: 'pc-top' },
         h('div', {}, h('span', { class: 'hint', text: 'Asking price' }), h('div', { class: 'price', text: money(d.price) })),
         isNum(d.arv) ? h('div', { class: 'pc-arv' }, h('span', { class: 'hint', text: 'ARV' }), h('b', { text: money(d.arv) })) : null),
-      pct != null || (eq != null && eq > 0) ? h('div', { class: 'pc-equity' },
-        pct != null ? h('span', { class: 'disc', text: pct + '% below ARV' }) : null,
+      eq != null && eq > 0 ? h('div', { class: 'pc-equity' },
         eq != null && eq > 0 ? h('span', {}, h('b', { text: money(eq) }), ' ' + equityLabel(d)) : null) : null);
     const name = s.advisorName || '606 Dispositions';
     card.append(h('div', { class: 'advisor' },
@@ -543,14 +538,12 @@
 
   function copyBlast(d) {
     const parts = [];
-    const pct = below(d);
     parts.push(`${(STATUS_LABEL[d.status] || '').toUpperCase()} DEAL | ${d.type || 'Property'} | ${locLine(d)}`);
     parts.push(d.address || '');
     const n = [`Price: ${money(d.price)}`];
     if (isNum(d.arv)) n.push(`ARV: ${money(d.arv)}`);
     if (isNum(d.repairs)) n.push(`Est. repairs: ${money(d.repairs)}`);
     parts.push(n.join(' | '));
-    if (pct != null) parts.push(`${pct}% below ARV`);
     const f = [];
     if (isNum(d.beds)) f.push(`${d.beds} bd`);
     if (isNum(d.baths)) f.push(`${d.baths} ba`);
