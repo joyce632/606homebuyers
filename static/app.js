@@ -249,7 +249,7 @@
       h('div', { class: 'media' },
         photos.length ? h('img', { src: photoUrl(photos[0], true), alt: '', loading: 'lazy' }) : h('div', { class: 'noimg' }, icon('house')),
         h('div', { class: 'media-tags' },
-          h('span'),
+          d.sample ? h('span', { class: 'sample-tag', text: 'Sample listing' }) : h('span'),
           pill(d.status)),
         (d.photoCount || photos.length) > 1 ? h('span', { class: 'pcount' }, icon('cam'), String(d.photoCount || photos.length)) : null),
       h('div', { class: 'card-body' },
@@ -676,7 +676,7 @@
       h('div', { class: 'dlg-body gate-body' },
         d ? h('div', { class: 'gate-deal' },
           (d.photos || []).length ? h('img', { src: photoUrl(d.photos[0], true), alt: '' }) : h('div', { class: 'noimg' }, icon('house')),
-          h('div', {}, h('b', { text: money(d.price) }), h('span', { text: [d.type, placeName(d)].filter(Boolean).join(' · ') }))) : null,
+          h('div', {}, h('b', { text: money(d.price) }), h('span', { text: [d.sample ? 'Sample listing' : null, d.type, placeName(d)].filter(Boolean).join(' · ') }))) : null,
         h('p', { class: 'muted', text: 'Members see the address, all photos, repair estimates, comps and the offer form. Joining is free.' }),
         gatePanel('gate', unlock)));
     if (!dlg.open) dlg.showModal();
@@ -695,7 +695,7 @@
         d.photoCount > 1 ? h('span', { class: 'btn btn-sm all-photos' }, icon('lock'), `${d.photoCount - 1} more photos for members`) : null),
       h('div', { class: 'deal-head' },
         h('div', { class: 'tags' }, pill(d.status)),
-        h('h1', { text: `${d.type || 'Property'} in ${placeName(d)}` }),
+        h('h1', { text: `${d.sample ? 'SAMPLE – ' : ''}${d.type || 'Property'} in ${placeName(d)}` }),
         h('div', { class: 'loc' }, icon('pin'), h('span', { text: locLine(d) + ' · Exact address for members' })),
         h('div', { class: 'head-row' },
           h('ul', { class: 'facts-lg' }, facts.map(([ic, v, l]) => h('li', {}, ic, h('div', {}, h('b', { text: v }), h('span', { text: l }))))),

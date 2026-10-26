@@ -508,7 +508,8 @@ def deal_for_viewer(r):
     if team or current_buyer():
         return d
     t = {k: d.get(k) for k in TEASER_FIELDS}
-    t.update(locked=True, photos=d["photos"][:1], photoCount=len(d["photos"]))
+    t.update(locked=True, photos=d["photos"][:1], photoCount=len(d["photos"]),
+             sample=(d.get("address") or "").upper().startswith("SAMPLE"))
     return t
 
 
