@@ -135,11 +135,13 @@
     try { S.settings = Object.assign(S.settings, (await api('GET', '/api/settings')).settings); } catch {}
   }
   async function loadMe() {
-    try { const d = await api('GET', '/api/me'); S.user = d.user; S.csrf = d.csrf || null; } catch {}
+    try { const d = await api('GET', '/api/me'); S.user = d.user; S.csrf = d.csrf || null; S.buyer = d.buyer || null; } catch {}
   }
   const findDeal = id => S.deals.find(d => d.id === id);
   const activeDeals = () => S.deals.filter(d => d.status === 'active');
   const publicDeals = () => S.deals.filter(d => d.status !== 'draft');
+  // Full deal details are for the team and for buyers on the list.
+  const unlocked = () => !!(S.user || S.buyer);
 
   /* ---------- routing ---------- */
   function go(url, opts = {}) {
@@ -148,7 +150,12 @@
   }
   document.addEventListener('click', e => {
     const a = e.target.closest('a[data-link]');
-    if (a && !(e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0)) { e.preventDefault(); go(a.getAttribute('href')); return; }
+    if (a && !(e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0)) {
+      e.preventDefault();
+      const dm = a.getAttribute('href').match(/^\/deal\/([A-Za-z0-9]+)$/);
+      if (dm && !unlocked()) { openGate(dm[1]); return; }
+      go(a.getAttribute('href')); return;
+    }
     if (e.target.closest('[data-contact]')) openContact(null);
   });
   window.addEventListener('popstate', () => route({ keepScroll: true }));
@@ -174,6 +181,7 @@
     const s = S.settings;
     const hasContact = !!(s.phone || s.email);
     $('btn-dashboard').hidden = !S.user;
+    $('btn-join').hidden = !!(S.user || S.buyer);
     const tp = $('top-phone');
     tp.hidden = !s.phone;
     if (s.phone) { tp.href = telHref(s.phone); tp.querySelector('span').textContent = s.phone; }
@@ -243,15 +251,16 @@
         h('div', { class: 'media-tags' },
           h('span'),
           pill(d.status)),
-        photos.length > 1 ? h('span', { class: 'pcount' }, icon('cam'), String(photos.length)) : null),
+        (d.photoCount || photos.length) > 1 ? h('span', { class: 'pcount' }, icon('cam'), String(d.photoCount || photos.length)) : null),
       h('div', { class: 'card-body' },
         h('div', { class: 'price-row' },
           h('span', { class: 'price', text: money(d.price) }),
           null),
         isNum(d.arv) ? h('div', { class: 'arv', text: 'ARV ' + money(d.arv) }) : null,
         h('div', { class: 'loc' }, icon('pin'), h('span', { text: [d.address, locLine(d)].filter(Boolean).join(', ') })),
-        eq != null && eq > 0 ? h('div', { class: 'equity' }, h('b', { text: money(eq) }), ' ' + equityLabel(d)) : null,
+        !d.locked && eq != null && eq > 0 ? h('div', { class: 'equity' }, h('b', { text: money(eq) }), ' ' + equityLabel(d)) : null,
         facts.length ? h('ul', { class: 'facts' }, facts) : null,
+        d.locked ? h('div', { class: 'lock-note' }, icon('lock'), 'Join the buyers list to see the address and full details') : null,
         h('div', { class: 'card-foot' },
           h('span', { class: 'tag', text: d.type || '' }),
           h('span', { text: ago(d.createdAt) }))));
@@ -271,7 +280,7 @@
     } else $('live-chip').hidden = true;
 
     renderGrid();
-    if (!$('join-slot').firstChild) $('join-slot').append(buyersSection());
+    renderJoin();
   }
 
   function renderGrid() {
@@ -349,6 +358,7 @@
         h('a', { class: 'btn btn-primary', href: '/#available', 'data-link': true }, 'See current deals')));
       return;
     }
+    if (d.locked) return renderLockedDeal(root, d);
     document.title = `${d.address || 'Untitled draft'} · ${placeName(d)} | 606 Home Buyers`;
     if (d.status === 'draft') root.append(h('div', { class: 'notice draft-banner' }, icon('lock'),
       h('span', { text: 'Draft. Only your team can see this page. Publish it from the editor when it is ready for buyers.' })));
@@ -572,15 +582,16 @@
   }
 
   /* ---------- buyers list sign-up ---------- */
-  function buyersSection() {
+  function buyerForm(px, onJoined) {
+    const id = k => px + '-' + k;
     const err = h('div', { class: 'err', hidden: true });
     const f = {
-      name: h('input', { class: 'input', id: 'bl-name', autocomplete: 'name', required: true }),
-      email: h('input', { class: 'input', id: 'bl-email', type: 'email', autocomplete: 'email' }),
-      phone: h('input', { class: 'input', id: 'bl-phone', type: 'tel', autocomplete: 'tel' }),
-      areas: h('input', { class: 'input', id: 'bl-areas', placeholder: 'e.g. Pilsen, Austin, Oak Park, Joliet' }),
-      maxPrice: h('input', { class: 'input num', id: 'bl-max', type: 'number', min: '0', step: '5000' }),
-      notes: h('textarea', { class: 'textarea textarea-sm', id: 'bl-notes', placeholder: 'Anything else about your buy box' }),
+      name: h('input', { class: 'input', id: id('name'), autocomplete: 'name', required: true }),
+      email: h('input', { class: 'input', id: id('email'), type: 'email', autocomplete: 'email' }),
+      phone: h('input', { class: 'input', id: id('phone'), type: 'tel', autocomplete: 'tel' }),
+      areas: h('input', { class: 'input', id: id('areas'), placeholder: 'e.g. Pilsen, Austin, Oak Park, Joliet' }),
+      maxPrice: h('input', { class: 'input num', id: id('max'), type: 'number', min: '0', step: '5000' }),
+      notes: h('textarea', { class: 'textarea textarea-sm', id: id('notes'), placeholder: 'Anything else about your buy box' }),
       website: h('input', { class: 'hp', name: 'website', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true' }),
     };
     const checks = (name, items) => h('div', { class: 'checkgrid' }, items.map(([v, l]) =>
@@ -588,45 +599,142 @@
     const types = checks('types', BUYBOX_TYPES.map(t => [t, t]));
     const counties = checks('counties', BUYBOX_COUNTIES.map(c => [c, c + ' County']));
     const funding = checks('funding', BUYBOX_FUNDING.map(x => [x, x]));
-    const btn = h('button', { class: 'btn btn-primary btn-lg', type: 'submit' }, 'Join the buyers list');
+    const btn = h('button', { class: 'btn btn-primary btn-lg', type: 'submit' }, 'Join and see the deals');
     const picked = (box) => [...box.querySelectorAll('input:checked')].map(i => i.value);
-    const form = h('form', { class: 'box buyer-form', novalidate: true, onsubmit: async e => {
+    const field = (k, label, el) => h('div', { class: 'field' }, h('label', { for: id(k), text: label }), el);
+    return h('form', { class: 'buyer-form', novalidate: true, onsubmit: async e => {
       e.preventDefault(); err.hidden = true; btn.disabled = true;
       try {
-        await api('POST', '/api/buyers', { name: f.name.value, email: f.email.value, phone: f.phone.value, areas: f.areas.value,
+        const r = await api('POST', '/api/buyers', { name: f.name.value, email: f.email.value, phone: f.phone.value, areas: f.areas.value,
           maxPrice: f.maxPrice.value, notes: f.notes.value, website: f.website.value,
           types: picked(types), counties: picked(counties), funding: picked(funding) });
-        form.replaceChildren(h('div', { class: 'sent' }, icon('check'), h('b', { text: "You're on the list" }),
-          h('span', { text: "We'll send you matching deals as soon as they're under contract." }),
-          h('a', { class: 'btn', href: '/#available', 'data-link': true }, 'Browse the deal board')));
+        await onJoined(r.buyer, true);
       } catch (ex) { err.hidden = false; err.textContent = ex.message; btn.disabled = false; }
     } },
-      h('h2', { text: 'Your buy box' }),
-      h('div', { class: 'field' }, h('label', { for: 'bl-name', text: 'Name' }), f.name),
-      h('div', { class: 'two' },
-        h('div', { class: 'field' }, h('label', { for: 'bl-phone', text: 'Phone' }), f.phone),
-        h('div', { class: 'field' }, h('label', { for: 'bl-email', text: 'Email' }), f.email)),
+      field('name', 'Name', f.name),
+      h('div', { class: 'two' }, field('phone', 'Phone', f.phone), field('email', 'Email', f.email)),
       h('fieldset', { class: 'field plain' }, h('legend', { text: 'Counties you buy in' }), counties),
-      h('div', { class: 'field' }, h('label', { for: 'bl-areas', text: 'Specific neighborhoods or cities (optional)' }), f.areas),
+      field('areas', 'Specific neighborhoods or cities (optional)', f.areas),
       h('fieldset', { class: 'field plain' }, h('legend', { text: 'Property types' }), types),
       h('fieldset', { class: 'field plain' }, h('legend', { text: 'How you fund deals (pick all that apply)' }), funding),
-      h('div', { class: 'field' }, h('label', { for: 'bl-max', text: 'Max purchase price' }), h('div', { class: 'money' }, f.maxPrice)),
-      h('div', { class: 'field' }, h('label', { for: 'bl-notes', text: 'Notes' }), f.notes),
+      field('max', 'Max purchase price', h('div', { class: 'money' }, f.maxPrice)),
+      field('notes', 'Notes', f.notes),
       f.website, err, btn,
       h('p', { class: 'hint', text: 'We only use your details to send you deals. Ask us any time and we will remove you from the list.' }));
-    return h('div', { class: 'buyers-layout' },
+  }
+
+  function signInForm(px, onDone) {
+    const err = h('div', { class: 'err', hidden: true });
+    const contact = h('input', { class: 'input', id: px + '-contact', autocomplete: 'email', placeholder: 'you@email.com or (312) 555-0100', required: true });
+    const hp = h('input', { class: 'hp', name: 'website', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true' });
+    const btn = h('button', { class: 'btn btn-primary btn-lg', type: 'submit' }, 'See the deals');
+    return h('form', { class: 'buyer-form', novalidate: true, onsubmit: async e => {
+      e.preventDefault(); err.hidden = true; btn.disabled = true;
+      try { const r = await api('POST', '/api/buyers/login', { contact: contact.value, website: hp.value }); await onDone(r.buyer, false); }
+      catch (ex) { err.hidden = false; err.textContent = ex.message; btn.disabled = false; }
+    } },
+      h('div', { class: 'field' }, h('label', { for: px + '-contact', text: 'Email or phone you joined with' }), contact),
+      hp, err, btn);
+  }
+
+  // Join or sign in, switchable. Used in the pop-up, on locked deal pages and on the home page.
+  function gatePanel(px, onUnlocked) {
+    const wrap = h('div', { class: 'gate-panel' });
+    const show = mode => {
+      wrap.replaceChildren(
+        mode === 'join' ? buyerForm(px, onUnlocked) : signInForm(px, onUnlocked),
+        h('p', { class: 'gate-switch' }, mode === 'join' ? 'Already on the buyers list? ' : 'Not on the list yet? ',
+          h('button', { class: 'linkish', type: 'button', onclick: () => show(mode === 'join' ? 'signin' : 'join') },
+            mode === 'join' ? 'Sign in with your email or phone' : 'Join the buyers list')));
+    };
+    show('join');
+    return wrap;
+  }
+
+  async function unlock(buyer, joined) {
+    S.buyer = buyer;
+    await loadDeals();
+    toast(joined ? `You're on the buyers list, ${buyer.name.split(' ')[0]}.` : `Welcome back, ${buyer.name.split(' ')[0]}.`);
+    const dlg = document.getElementById('dlg-gate');
+    const target = dlg && dlg.open ? dlg.dataset.deal : null;
+    if (dlg && dlg.open) dlg.close();
+    if (target) go('/deal/' + target); else route({ keepScroll: true });
+  }
+
+  function openGate(dealId) {
+    let dlg = document.getElementById('dlg-gate');
+    if (!dlg) {
+      dlg = h('dialog', { id: 'dlg-gate', class: 'dlg-gate', 'aria-labelledby': 'gate-title' });
+      dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+      document.body.append(dlg);
+    }
+    const d = findDeal(dealId);
+    dlg.dataset.deal = dealId || '';
+    dlg.replaceChildren(
+      h('div', { class: 'dlg-head' }, h('h2', { id: 'gate-title', text: 'Join the buyers list to see this deal' }),
+        h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: () => dlg.close() }, icon('x'))),
+      h('div', { class: 'dlg-body gate-body' },
+        d ? h('div', { class: 'gate-deal' },
+          (d.photos || []).length ? h('img', { src: photoUrl(d.photos[0], true), alt: '' }) : h('div', { class: 'noimg' }, icon('house')),
+          h('div', {}, h('b', { text: money(d.price) }), h('span', { text: [d.type, placeName(d)].filter(Boolean).join(' · ') }))) : null,
+        h('p', { class: 'muted', text: 'Members see the address, all photos, repair estimates, comps and the offer form. Joining is free.' }),
+        gatePanel('gate', unlock)));
+    if (!dlg.open) dlg.showModal();
+  }
+
+  function renderLockedDeal(root, d) {
+    document.title = `${d.type || 'Deal'} in ${placeName(d)} | 606 Home Buyers`;
+    const facts = [];
+    if (isNum(d.beds)) facts.push([icon('bed'), numf(d.beds), 'Beds']);
+    if (isNum(d.baths)) facts.push([icon('bath'), numf(d.baths), 'Baths']);
+    if (isNum(d.sqft)) facts.push([icon('ruler'), numf(d.sqft), 'Sq ft']);
+    if (d.type) facts.push([icon('house'), d.type, 'Type']);
+    root.append(
+      h('div', { class: 'mosaic mosaic-1 locked-cover' },
+        (d.photos || []).length ? h('img', { src: photoUrl(d.photos[0]), alt: '' }) : h('div', { class: 'noimg' }, icon('house')),
+        d.photoCount > 1 ? h('span', { class: 'btn btn-sm all-photos' }, icon('lock'), `${d.photoCount - 1} more photos for members`) : null),
+      h('div', { class: 'deal-head' },
+        h('div', { class: 'tags' }, pill(d.status)),
+        h('h1', { text: `${d.type || 'Property'} in ${placeName(d)}` }),
+        h('div', { class: 'loc' }, icon('pin'), h('span', { text: locLine(d) + ' · Exact address for members' })),
+        h('div', { class: 'head-row' },
+          h('ul', { class: 'facts-lg' }, facts.map(([ic, v, l]) => h('li', {}, ic, h('div', {}, h('b', { text: v }), h('span', { text: l }))))),
+          h('div', { class: 'locked-price' }, h('b', { text: money(d.price) }), isNum(d.arv) ? h('span', { text: 'ARV ' + money(d.arv) }) : null))),
+      h('div', { class: 'box gate-inline' },
+        h('h2', { text: 'See the full deal' }),
+        h('p', { class: 'muted', text: 'Join the 606 buyers list for free to see the address, every photo, the repair estimate, comps and the offer form.' }),
+        gatePanel('gd', unlock)));
+  }
+
+  function renderJoin() {
+    const key = S.buyer ? 'member:' + S.buyer.name : S.user ? 'team' : 'guest';
+    const slot = $('join-slot');
+    if (slot.dataset.key === key) return;
+    slot.dataset.key = key;
+    if (S.buyer) {
+      slot.replaceChildren(h('div', { class: 'member-box' }, icon('check'),
+        h('div', {}, h('b', { text: `You're on the buyers list, ${S.buyer.name.split(' ')[0]}.` }),
+          h('span', { text: 'Open any deal for the full details. New deals that fit your buy box will come straight to you.' })),
+        h('button', { class: 'linkish', type: 'button', onclick: async () => {
+          try { await api('POST', '/api/buyers/logout'); } catch {}
+          S.buyer = null; await loadDeals(); route({ keepScroll: true });
+        } }, 'Not you? Sign out')));
+      return;
+    }
+    slot.replaceChildren(h('div', { class: 'buyers-layout' },
       h('div', { class: 'buyers-pitch' },
         h('div', { class: 'kicker', text: 'Buyers list' }),
         h('h2', { text: 'Get off-market deals before they hit the site' }),
-        h('p', { class: 'lede', text: 'Tell us what you buy. When a property that fits goes under contract, you hear about it first.' }),
+        h('p', { class: 'lede', text: 'Join free to unlock every deal on the board. When a property that fits your buy box goes under contract, you hear about it first.' }),
         h('ul', { class: 'checks' }, [
-          'Deals matched to your areas, property types and price range',
-          'Price, ARV, repair estimate and photos with every deal',
+          'Full address, photos, repair estimate and comps on every deal',
+          'Deals matched to your counties, property types and price range',
           'Direct line to our dispositions team',
           'No cost, no obligation',
         ].map(t => h('li', {}, icon('check'), h('span', { text: t }))))),
-      form);
+      h('div', { class: 'box' }, h('h2', { class: 'form-title', text: 'Your buy box' }), gatePanel('bl', unlock))));
   }
+
 
   /* ---------- deal editor ---------- */
   const F = id => $('f-' + id);

@@ -390,11 +390,13 @@ def logout():
 @app.get("/api/me")
 def me():
     u = current_user()
+    b = current_buyer()
+    buyer = {"name": b["name"]} if b else None
     if not u:
-        return jsonify(user=None)
+        return jsonify(user=None, buyer=buyer)
     if "csrf" not in session:
         session["csrf"] = secrets.token_urlsafe(24)
-    return jsonify(user=user_out(u), csrf=session["csrf"])
+    return jsonify(user=user_out(u), csrf=session["csrf"], buyer=buyer)
 
 
 @app.post("/api/password")
@@ -495,11 +497,26 @@ def delete_user(uid):
 # ---------------------------------------------------------------- deals
 
 
+# Visitors who haven't joined the buyers list only see these fields.
+TEASER_FIELDS = ("id", "status", "price", "arv", "beds", "baths", "sqft", "units", "type", "area", "city", "zip", "county",
+                 "createdAt", "updatedAt")
+
+
+def deal_for_viewer(r):
+    team = bool(current_user())
+    d = deal_out(r, team)
+    if team or current_buyer():
+        return d
+    t = {k: d.get(k) for k in TEASER_FIELDS}
+    t.update(locked=True, photos=d["photos"][:1], photoCount=len(d["photos"]))
+    return t
+
+
 @app.get("/api/deals")
 def list_deals():
-    private = bool(current_user())
+    team = bool(current_user())
     rows = db().all("SELECT * FROM deals ORDER BY created_at DESC")
-    return jsonify(deals=[deal_out(r, private) for r in rows if private or r["status"] != "draft"])
+    return jsonify(deals=[deal_for_viewer(r) for r in rows if team or r["status"] != "draft"])
 
 
 @app.get("/api/deals/<did>")
@@ -507,7 +524,7 @@ def get_deal(did):
     r = db().one("SELECT * FROM deals WHERE id=?", (did,))
     if not r or (r["status"] == "draft" and not current_user()):
         abort(404, "Deal not found.")
-    return jsonify(deal=deal_out(r, bool(current_user())))
+    return jsonify(deal=deal_for_viewer(r))
 
 
 def _clean_photos(body):
@@ -769,16 +786,60 @@ def create_buyer():
         "funding": _picked(body.get("funding"), BUYBOX_FUNDING),
         "notes": str(body.get("notes") or "").strip()[:1000] or None,
     }
+    bid = None
     if email:
         old = db().one("SELECT id FROM buyers WHERE email=?", (email,))
         if old:
+            bid = old["id"]
             db().execute("UPDATE buyers SET name=?, phone=?, data=?, created_at=? WHERE id=?",
-                         (name, phone, json.dumps(data), now_ms(), old["id"]))
-            db().commit()
-            return jsonify(ok=True)
-    db().execute("INSERT INTO buyers (id, name, email, phone, data, created_at) VALUES (?,?,?,?,?,?)",
-                 (uuid.uuid4().hex[:12], name, email, phone, json.dumps(data), now_ms()))
+                         (name, phone, json.dumps(data), now_ms(), bid))
+    if not bid:
+        bid = uuid.uuid4().hex[:12]
+        db().execute("INSERT INTO buyers (id, name, email, phone, data, created_at) VALUES (?,?,?,?,?,?)",
+                     (bid, name, email, phone, json.dumps(data), now_ms()))
     db().commit()
+    _sign_in_buyer(bid)
+    return jsonify(ok=True, buyer={"name": name})
+
+
+# Buyers unlock full deal details by joining the list, or by signing back in with
+# the email or phone they joined with. This is a marketing gate, not an account:
+# there is no password, so never put anything here that needs one.
+def current_buyer():
+    if "buyer" not in g:
+        bid = session.get("buyer_id")
+        g.buyer = db().one("SELECT id, name FROM buyers WHERE id=?", (bid,)) if bid else None
+    return g.buyer
+
+
+def _sign_in_buyer(bid):
+    session.permanent = True
+    session["buyer_id"] = bid
+    g.pop("buyer", None)
+
+
+@app.post("/api/buyers/login")
+def buyer_login():
+    body = _public_guard()
+    who = str(body.get("contact") or "").strip().lower()
+    digits = re.sub(r"\D", "", who)[-10:]
+    row = None
+    if "@" in who:
+        row = db().one("SELECT id, name FROM buyers WHERE email=?", (who,))
+    elif len(digits) == 10:
+        for r in db().all("SELECT id, name, phone FROM buyers WHERE phone IS NOT NULL"):
+            if re.sub(r"\D", "", r["phone"])[-10:] == digits:
+                row = r
+                break
+    if not row:
+        abort(404, "We couldn't find that email or phone on the buyers list. Join the list to see the deals.")
+    _sign_in_buyer(row["id"])
+    return jsonify(ok=True, buyer={"name": row["name"]})
+
+
+@app.post("/api/buyers/logout")
+def buyer_logout():
+    session.pop("buyer_id", None)
     return jsonify(ok=True)
 
 
@@ -877,7 +938,7 @@ def send_index(deal=None):
     title, desc, image = DEFAULT_TITLE, DEFAULT_DESC, request.url_root.rstrip("/") + "/static/og.png"
     if deal:
         place = ", ".join(x for x in [deal.get("area"), deal.get("city") or "Chicago"] if x)
-        title = f"{deal.get('address') or 'Deal'} · {place} | 606 Home Buyers"
+        title = f"{deal.get('type') or 'Deal'} in {place} | 606 Home Buyers"
         bits = [deal.get("type"), _money(deal.get("price")) and "Asking " + _money(deal.get("price")),
                 deal.get("arv") and "ARV " + _money(deal.get("arv")),
                 deal.get("beds") is not None and f"{deal['beds']} bd",
